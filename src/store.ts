@@ -84,7 +84,17 @@ export interface Backlink {
 const DUP_SIM_THRESHOLD = 0;
 
 export class MemoryStore {
-  constructor(private db: Database.Database) {}
+  private deleteAutoLinks: Database.Statement;
+  private insertLink: Database.Statement;
+
+  constructor(private db: Database.Database) {
+    this.deleteAutoLinks = this.db.prepare(`DELETE FROM links WHERE from_id = ? AND source = 'auto'`);
+    this.insertLink = this.db.prepare(
+      `INSERT OR IGNORE INTO links
+       (from_id, to_namespace, to_key, relation, source)
+       VALUES (?, ?, ?, 'wikilink', 'auto')`,
+    );
+  }
 
   note(input: NoteInput): NoteResult {
     const namespace = input.namespace;
@@ -170,16 +180,9 @@ export class MemoryStore {
     sourceNamespace: string,
     content: string,
   ): void {
-    this.db
-      .prepare(`DELETE FROM links WHERE from_id = ? AND source = 'auto'`)
-      .run(memoryId);
+    this.deleteAutoLinks.run(memoryId);
     const refs = parseWikilinks(content, sourceNamespace);
-    const insert = this.db.prepare(
-      `INSERT OR IGNORE INTO links
-       (from_id, to_namespace, to_key, relation, source)
-       VALUES (?, ?, ?, 'wikilink', 'auto')`,
-    );
-    for (const r of refs) insert.run(memoryId, r.namespace, r.key);
+    for (const r of refs) this.insertLink.run(memoryId, r.namespace, r.key);
   }
 
   private findNearDuplicates(
