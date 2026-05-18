@@ -1,0 +1,54 @@
+{
+  "categories": {
+    "explicit_invocation": {
+      "expectation": "should call memory_note",
+      "prompts": [
+        "Remember that our merge freeze starts May 24, 2026 because mobile is cutting a release branch.",
+        "Save this for later: the Enzo auth rewrite is driven by SOC2 evidence collection, not a perf concern.",
+        "Note that Alice is on PTO from June 1–10.",
+        "File this away: we benchmarked Postgres vs SQLite for the memory store and SQLite + Litestream won on cost.",
+        "Add to memory: my preferred onboarding email cadence is day 0, day 2, day 7."
+      ]
+    },
+    "implicit_recall": {
+      "expectation": "should call memory_recall or memory_browse without being told",
+      "prompts": [
+        "Did we already decide what auth provider we're using for Enzo?",
+        "What's the merge freeze date again?",
+        "I'm picking up the Loops onboarding rewrite — what context do we have on it?",
+        "Who's on PTO this week?",
+        "Why did we pick SQLite over Postgres for the memory store?"
+      ]
+    },
+    "implicit_write": {
+      "expectation": "should call memory_note without being told",
+      "prompts": [
+        "We just picked Clerk for auth — going to start the migration tomorrow.",
+        "Quick update: legal cleared the new privacy policy, we can ship on Monday.",
+        "Just realized our staging Postgres is on a different major version than prod. Not great.",
+        "We're going to standardize on Vitest across all the TypeScript repos.",
+        "Decision: any PR over 500 lines needs two reviewers from now on."
+      ]
+    },
+    "distractor": {
+      "expectation": "should NOT call any memory_ tool",
+      "prompts": [
+        "What's 17 times 23?",
+        "Write a fizzbuzz in Python.",
+        "Translate 'good morning' to Japanese.",
+        "Explain what a B-tree is in two sentences.",
+        "What year did the French Revolution start?"
+      ]
+    },
+    "multi_step": {
+      "expectation": "should call recall then possibly read or link",
+      "prompts": [
+        "I'm reviewing a PR for Enzo — refresh me on what we decided about auth last week, then I'll tell you what the PR does.",
+        "Pull up our notes on the Loops onboarding rewrite and tell me whether the PR I'm about to share contradicts any of them.",
+        "What have I told you about my email-cadence preferences? After you tell me, link those preferences to the current campaign-design notes.",
+        "Show me everything tagged 'decision' from the project:enzo namespace and summarize the top three.",
+        "Find the merge-freeze note, then check whether we've documented the post-freeze re-enable steps anywhere."
+      ]
+    }
+  }
+}
