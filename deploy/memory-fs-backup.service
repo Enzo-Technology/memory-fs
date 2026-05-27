@@ -1,0 +1,10 @@
+[Unit]
+Description=memory-fs database backup to GCS
+
+[Service]
+Type=oneshot
+ExecStart=/opt/memory-fs/deploy/backup.sh
+User=memoryfs
+Group=memoryfs
+# Provides BUCKET and DB (and any other vars shared with the main service).
+EnvironmentFile=/etc/memory-fs/env

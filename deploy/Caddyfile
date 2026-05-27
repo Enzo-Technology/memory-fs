@@ -1,0 +1,6 @@
+# Expects MEMORY_FS_DOMAIN and MEMORY_FS_HTTP_PORT in Caddy's environment.
+# Caddy handles HTTPS and certificate renewal automatically via Let's Encrypt.
+
+{$MEMORY_FS_DOMAIN} {
+    reverse_proxy 127.0.0.1:{$MEMORY_FS_HTTP_PORT}
+}

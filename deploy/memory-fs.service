@@ -1,0 +1,26 @@
+[Unit]
+Description=memory-fs MCP server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/node /opt/memory-fs/dist/server.js
+WorkingDirectory=/opt/memory-fs
+# Holds MEMORY_FS_HTTP_PORT, MEMORY_FS_TOKEN, MEMORY_FS_DB, etc.
+# Provisioned on the host with mode 600 — never committed.
+EnvironmentFile=/etc/memory-fs/env
+User=memoryfs
+Group=memoryfs
+Restart=always
+RestartSec=2
+
+# Hardening — ProtectSystem=strict makes the filesystem read-only except for
+# explicitly listed paths; ReadWritePaths carves out the DB directory.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/memory-fs
+
+[Install]
+WantedBy=multi-user.target
