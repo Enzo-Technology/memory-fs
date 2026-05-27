@@ -204,6 +204,12 @@ if (httpPort) {
     process.exit(1);
   }
 
+  const parsedPort = parseInt(httpPort, 10);
+  if (isNaN(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
+    console.error(`[memory-fs] MEMORY_FS_HTTP_PORT must be a number between 1 and 65535, got: ${httpPort}`);
+    process.exit(1);
+  }
+
   const httpServer = createHttpServer((req, res) => {
     const auth = req.headers["authorization"];
     if (auth !== `Bearer ${token}`) {
@@ -213,15 +219,16 @@ if (httpPort) {
     }
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     const mcpServer = buildServer();
+    res.on("close", () => { transport.close().catch(() => {}); });
     mcpServer.connect(transport).then(() => {
-      transport.handleRequest(req, res);
+      return transport.handleRequest(req, res);
     }).catch((e) => {
       console.error("[memory-fs] transport error:", (e as Error).message);
-      res.writeHead(500).end();
+      if (!res.headersSent) res.writeHead(500).end();
     });
   });
 
-  httpServer.listen(parseInt(httpPort, 10), "127.0.0.1", () => {
+  httpServer.listen(parsedPort, "127.0.0.1", () => {
     console.error(`[memory-fs] listening on 127.0.0.1:${httpPort}`);
   });
 } else {

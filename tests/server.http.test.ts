@@ -30,16 +30,25 @@ async function spawnHttpServer(port: number, token: string): Promise<{ kill: () 
     stdio: ["ignore", "ignore", "ignore"],
   });
 
+  // Ensure the child is killed if vitest is forcibly terminated
+  process.on("exit", () => child.kill());
+
   // Wait until the server is accepting connections
   const deadline = Date.now() + 5000;
+  let connected = false;
   while (Date.now() < deadline) {
-    const ok = await new Promise<boolean>((resolve) => {
+    connected = await new Promise<boolean>((resolve) => {
       const c = createConnection({ port, host: "127.0.0.1" });
       c.on("connect", () => { c.destroy(); resolve(true); });
       c.on("error", () => resolve(false));
     });
-    if (ok) break;
+    if (connected) break;
     await new Promise((r) => setTimeout(r, 50));
+  }
+
+  if (!connected) {
+    child.kill();
+    throw new Error(`server did not start within 5s on port ${port}`);
   }
 
   return { kill: () => child.kill() };
