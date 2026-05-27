@@ -81,7 +81,7 @@ export interface Backlink {
   source: "auto" | "manual";
 }
 
-const DUP_SIM_THRESHOLD = 0;
+const DUP_BM25_MAX = 0;
 
 export class MemoryStore {
   private deleteAutoLinks: Database.Statement;
@@ -214,7 +214,7 @@ export class MemoryStore {
         excludeId,
       });
     return rows
-      .filter((r) => r.rank < DUP_SIM_THRESHOLD)
+      .filter((r) => r.rank < DUP_BM25_MAX)
       .map((r) => ({ namespace: r.namespace, key: r.key, score: -r.rank }));
   }
 

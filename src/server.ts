@@ -9,7 +9,16 @@ const memoryType = z.enum(["user", "feedback", "project", "reference", "note"]);
 const onConflict = z.enum(["overwrite", "append", "error"]);
 const browseKind = z.enum(["index", "recent", "hubs", "orphans", "tags"]);
 
-const db = openDb();
+const dbPath = process.env.MEMORY_FS_DB ?? `${process.env.HOME}/.memory-fs/memory.db`;
+console.error(`[memory-fs] starting pid=${process.pid} db=${dbPath} node=${process.version}`);
+
+let db;
+try {
+  db = openDb();
+} catch (e) {
+  console.error(`[memory-fs] failed to open db at ${dbPath}: ${(e as Error).message}`);
+  process.exit(1);
+}
 const store = new MemoryStore(db);
 
 const server = new McpServer({ name: "memory-fs", version: "0.1.0" });
@@ -182,3 +191,4 @@ server.registerTool(
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
+console.error(`[memory-fs] connected over stdio`);

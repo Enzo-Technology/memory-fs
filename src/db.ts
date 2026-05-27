@@ -41,6 +41,7 @@ export function openDb(path = DEFAULT_DB_PATH): Database.Database {
   const db = new Database(path);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
+  db.pragma("busy_timeout = 5000");
   migrate(db);
   return db;
 }
@@ -91,8 +92,6 @@ function migrate(db: Database.Database): void {
       INSERT INTO memories_fts(rowid, key, content, tags)
       VALUES (new.id, new.key, new.content, new.tags);
     END;
-
-    DROP TABLE IF EXISTS links;
 
     CREATE TABLE IF NOT EXISTS links (
       from_id        INTEGER NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
