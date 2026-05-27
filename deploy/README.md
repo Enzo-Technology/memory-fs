@@ -33,7 +33,31 @@ systemctl enable --now memory-fs-backup.timer
 
 ## Caddy
 
-Install Caddy and point it at `deploy/Caddyfile`. Caddy needs `MEMORY_FS_DOMAIN` and `MEMORY_FS_HTTP_PORT` in its environment (e.g. via `/etc/caddy/caddy.env` loaded by the Caddy systemd unit). It handles HTTPS and cert renewal automatically.
+Install Caddy and point it at `deploy/Caddyfile`. Caddy needs `MEMORY_FS_DOMAIN` and `MEMORY_FS_HTTP_PORT` in its environment. It handles HTTPS and cert renewal automatically.
+
+### Caddy env drop-in
+
+The stock Debian Caddy systemd unit does **not** load an env file by default, so the variables won't reach the Caddyfile without a drop-in. Create it once:
+
+```bash
+mkdir -p /etc/systemd/system/caddy.service.d
+```
+
+`/etc/systemd/system/caddy.service.d/env.conf`:
+
+```ini
+[Service]
+EnvironmentFile=/etc/caddy/caddy.env
+```
+
+`/etc/caddy/caddy.env` (mode 600, owned root):
+
+```
+MEMORY_FS_DOMAIN=memory.example.com
+MEMORY_FS_HTTP_PORT=3456
+```
+
+Then `systemctl daemon-reload && systemctl restart caddy`.
 
 ---
 

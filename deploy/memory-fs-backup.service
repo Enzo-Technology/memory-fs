@@ -1,5 +1,9 @@
 [Unit]
 Description=memory-fs database backup to GCS
+# Persistent=true on the timer means a missed backup fires on boot; ensure the
+# network is up before gsutil tries to reach GCS.
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
