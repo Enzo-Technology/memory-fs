@@ -6,9 +6,9 @@ Open-source, self-hosted. Designed to let Claude, Cursor, ChatGPT, and any custo
 
 ## Status
 
-**Phase 1 prototype.** Local-only stdio MCP server. Wiki-shaped: auto-extracted `[[wikilinks]]`, backlinks, hubs, tag vocabulary. 7-tool surface validated against Claude Haiku 4.5 via an included eval harness. Not yet hosted; transport remains stdio until Phase 5.
+**Phase 1 + 5 prototype.** Wiki-shaped MCP server: auto-extracted `[[wikilinks]]`, backlinks, hubs, tag vocabulary. 7-tool surface validated against Claude Haiku 4.5 via an included eval harness. Runs over stdio by default, or over Streamable HTTP with bearer auth for a hosted shared store (see Hosting below).
 
-See [`docs/plans/2026-05-18-phase-1-wiki-layer-and-eval.md`](docs/plans/2026-05-18-phase-1-wiki-layer-and-eval.md) for the full design.
+See [`docs/plans/2026-05-18-phase-1-wiki-layer-and-eval.md`](docs/plans/2026-05-18-phase-1-wiki-layer-and-eval.md) and [`docs/plans/2026-05-27-phase-5-hosted-gcp.md`](docs/plans/2026-05-27-phase-5-hosted-gcp.md) for the full design.
 
 ## Quick start
 
@@ -31,6 +31,25 @@ DB lives at `~/.memory-fs/memory.db` by default; override with `MEMORY_FS_DB=/pa
 | `memory_delete` | Permanent delete; refuses if backlinks exist (`force=true` overrides) |
 | `memory_link` | Manual link (most links come from auto-extracted `[[wikilinks]]`) |
 | `memory_backlinks` | List records that point to a given memory |
+
+## Hosting (shared store)
+
+Set `MEMORY_FS_HTTP_PORT` to serve over Streamable HTTP instead of stdio; `MEMORY_FS_TOKEN` is then required and every request must send `Authorization: Bearer <token>`. The server binds `127.0.0.1`, so run it behind a TLS-terminating reverse proxy (the included [`deploy/`](deploy/) has a Caddy config, systemd units, and a GCS backup timer for a single free-tier VM). Full runbook: [`docs/plans/2026-05-27-phase-5-hosted-gcp.md`](docs/plans/2026-05-27-phase-5-hosted-gcp.md).
+
+## Local web UI
+
+A local-only page to browse, read, and delete memories in a hosted store. It runs a small proxy on your machine that holds the bearer token server-side and talks to the remote over MCP — **the token never reaches the browser**, and the browser only ever talks to `localhost`.
+
+```sh
+npm run build
+MEMORY_FS_URL=https://your-host.example.com/ \
+MEMORY_FS_TOKEN=<your-bearer-token> \
+MEMORY_FS_UI_PORT=4040 \
+npm run ui
+# then open http://127.0.0.1:4040
+```
+
+`MEMORY_FS_UI_PORT` defaults to 4040. Scope is browse/read/delete only — memories are still authored by agents via `memory_note`.
 
 ## Evaluation
 
