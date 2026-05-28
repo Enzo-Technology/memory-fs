@@ -2,6 +2,7 @@
 import { createServer as createHttpServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Server } from "node:http";
@@ -37,8 +38,14 @@ async function callTool(
   await client.connect(transport);
   try {
     const result = await client.callTool({ name, arguments: args });
-    const content = result.content as Array<{ type: string; text?: string }>;
+    const content = result.content as Array<{ type: string; text?: string }> | undefined;
+    if (!content || content.length === 0) {
+      throw new Error("tool returned empty content");
+    }
     const text = content[0].text ?? "";
+    if (result.isError) {
+      return { error: text };
+    }
     return JSON.parse(text);
   } finally {
     await client.close();
@@ -64,10 +71,21 @@ function jsonResponse(
   res.end(payload);
 }
 
+const MAX_BODY_BYTES = 65536;
+
 function readBody(req: import("node:http").IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on("data", (c: Buffer) => chunks.push(c));
+    let size = 0;
+    req.on("data", (c: Buffer) => {
+      size += c.length;
+      if (size > MAX_BODY_BYTES) {
+        req.destroy();
+        reject(new Error("payload too large"));
+        return;
+      }
+      chunks.push(c);
+    });
     req.on("end", () => resolve(Buffer.concat(chunks).toString()));
     req.on("error", reject);
   });
@@ -120,7 +138,10 @@ export async function startUiServer(): Promise<Server> {
         };
         if (q.has("namespace")) args.namespace = q.get("namespace");
         if (q.has("prefix")) args.prefix = q.get("prefix");
-        if (q.has("limit")) args.limit = parseInt(q.get("limit")!, 10);
+        if (q.has("limit")) {
+          const parsed = parseInt(q.get("limit")!, 10);
+          if (!isNaN(parsed)) args.limit = parsed;
+        }
         const data = await callTool(memoryFsUrl, token, "memory_browse", args);
         jsonResponse(res, 200, data);
         return;
@@ -157,13 +178,20 @@ export async function startUiServer(): Promise<Server> {
       // -----------------------------------------------------------------------
       if (method === "POST" && path === "/api/delete") {
         const raw = await readBody(req);
-        const { namespace, key, force } = JSON.parse(raw) as {
-          namespace: string;
-          key: string;
-          force?: boolean;
-        };
+        let namespace: string, key: string, force: boolean | undefined;
+        try {
+          ({ namespace, key, force } = JSON.parse(raw) as {
+            namespace: string;
+            key: string;
+            force?: boolean;
+          });
+        } catch {
+          jsonResponse(res, 400, { error: "invalid JSON" });
+          return;
+        }
         // Tool returns an error result (not a thrown error) when backlinks block
-        // deletion. Pass the result through as-is; don't treat it as a 500.
+        // deletion. callTool returns { error: text } for isError results, which
+        // passes through to the client as HTTP 200.
         const data = await callTool(memoryFsUrl, token, "memory_delete", {
           namespace,
           key,
@@ -195,8 +223,7 @@ export async function startUiServer(): Promise<Server> {
 // ---------------------------------------------------------------------------
 
 // Detect if this file is the main module
-const isMain = process.argv[1]?.endsWith("ui-server.js") ||
-  process.argv[1]?.endsWith("ui-server.ts");
+const isMain = process.argv[1] === fileURLToPath(import.meta.url);
 
 if (isMain) {
   startUiServer().catch((e) => {

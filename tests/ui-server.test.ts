@@ -1,4 +1,4 @@
-import { describe, expect, it, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { spawn } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -66,23 +66,35 @@ describe("ui-server proxy", () => {
   let backend: { kill: () => void };
   let uiServer: Server;
   let dbDir: string;
+  let mcpUrl: string;
 
-  afterAll(async () => {
-    uiServer?.close();
-    backend?.kill();
-  });
-
-  it("full lifecycle: browse, read, delete", async () => {
-    // Arrange: spin up real MCP server
+  beforeAll(async () => {
+    // Spin up real MCP server
     dbDir = mkdtempSync(join(tmpdir(), "memfs-ui-"));
     const dbPath = join(dbDir, "test.db");
     backendPort = await getFreePort();
     uiPort = await getFreePort();
     backend = await spawnHttpServer(backendPort, token, dbPath);
+    mcpUrl = `http://127.0.0.1:${backendPort}/mcp`;
 
+    // Start UI server with env pointing to our backend
+    process.env.MEMORY_FS_URL = `http://127.0.0.1:${backendPort}/`;
+    process.env.MEMORY_FS_TOKEN = token;
+    process.env.MEMORY_FS_UI_PORT = String(uiPort);
+
+    const startUiServer = await importStartUiServer();
+    uiServer = await startUiServer();
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => uiServer?.close(() => resolve()));
+    backend?.kill();
+  });
+
+  it("full lifecycle: browse, read, delete", async () => {
     // Seed data via MCP client
     const transport = new StreamableHTTPClientTransport(
-      new URL(`http://127.0.0.1:${backendPort}/mcp`),
+      new URL(mcpUrl),
       { requestInit: { headers: { Authorization: `Bearer ${token}` } } },
     );
     const client = new Client({ name: "test-seeder", version: "0" });
@@ -96,14 +108,6 @@ describe("ui-server proxy", () => {
       },
     });
     await client.close();
-
-    // Start UI server with env pointing to our backend
-    process.env.MEMORY_FS_URL = `http://127.0.0.1:${backendPort}/`;
-    process.env.MEMORY_FS_TOKEN = token;
-    process.env.MEMORY_FS_UI_PORT = String(uiPort);
-
-    const startUiServer = await importStartUiServer();
-    uiServer = await startUiServer();
 
     // GET / — placeholder or index.html (200 either way)
     const rootRes = await fetch(`http://127.0.0.1:${uiPort}/`);
@@ -156,5 +160,46 @@ describe("ui-server proxy", () => {
     // 404 for unknown route
     const notFoundRes = await fetch(`http://127.0.0.1:${uiPort}/api/unknown`);
     expect(notFoundRes.status).toBe(404);
+  });
+
+  it("delete blocked by backlinks returns 200 with error message", async () => {
+    // Seed target note
+    const transport = new StreamableHTTPClientTransport(
+      new URL(mcpUrl),
+      { requestInit: { headers: { Authorization: `Bearer ${token}` } } },
+    );
+    const client = new Client({ name: "test-backlink-seeder", version: "0" });
+    await client.connect(transport);
+    await client.callTool({
+      name: "memory_note",
+      arguments: { namespace: "bl-ns", key: "target", content: "target note" },
+    });
+    // Seed source note with a wikilink to target
+    await client.callTool({
+      name: "memory_note",
+      arguments: { namespace: "bl-ns", key: "src", content: "links to [[target]]" },
+    });
+    await client.close();
+
+    // Attempt delete of target without force — backlinks should block it
+    const res = await fetch(`http://127.0.0.1:${uiPort}/api/delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ namespace: "bl-ns", key: "target", force: false }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { error?: string };
+    expect(typeof body.error).toBe("string");
+    expect(body.error).toMatch(/backlinks/i);
+
+    // force:true should succeed
+    const forceRes = await fetch(`http://127.0.0.1:${uiPort}/api/delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ namespace: "bl-ns", key: "target", force: true }),
+    });
+    expect(forceRes.status).toBe(200);
+    const forceBody = await forceRes.json() as { deleted?: boolean };
+    expect(forceBody.deleted).toBe(true);
   });
 });
