@@ -11,7 +11,9 @@
     "start": "node dist/server.js",
     "dev": "tsx src/server.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "ui": "node dist/ui-server.js",
+    "ui:dev": "tsx src/ui-server.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
