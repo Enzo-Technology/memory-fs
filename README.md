@@ -51,6 +51,8 @@ npm run ui
 
 `MEMORY_FS_UI_PORT` defaults to 4040. Scope is browse/read/delete only — memories are still authored by agents via `memory_note`.
 
+To keep the token out of your shell, store `MEMORY_FS_URL` and `MEMORY_FS_TOKEN` in [Infisical](https://infisical.com) and run `npm run ui:secure` (`infisical run -- node dist/ui-server.js`) — it injects the secrets as env vars. Requires `infisical login` + `infisical init` once to link the project; pass `--env=<name>` to `infisical run` to pick a non-default environment.
+
 ## Evaluation
 
 A scripted harness drives the server against Claude Haiku 4.5 across 3 system-prompt variants × 2 tool-regimes × 25 prompts × 5 runs = 750 calls. Set `ANTHROPIC_API_KEY` and:

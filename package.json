@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "ui": "node dist/ui-server.js",
-    "ui:dev": "tsx src/ui-server.ts"
+    "ui:dev": "tsx src/ui-server.ts",
+    "ui:secure": "infisical run -- node dist/ui-server.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
