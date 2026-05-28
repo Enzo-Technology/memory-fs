@@ -459,14 +459,6 @@
 // Utilities
 // ---------------------------------------------------------------------------
 
-function esc(str) {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
 function setStatus(msg) {
   document.getElementById("status-bar").textContent = msg;
 }
@@ -516,11 +508,16 @@ async function loadList() {
   try {
     data = await apiFetch(buildBrowseUrl());
   } catch (e) {
-    listEl.innerHTML = `<div class="no-items" style="padding:12px;color:#c0392b;">${esc(e.message)}</div>`;
+    listEl.replaceChildren();
+    const errEl = document.createElement("div");
+    errEl.className = "no-items";
+    errEl.style.cssText = "padding:12px;color:#c0392b;";
+    errEl.textContent = e.message;
+    listEl.appendChild(errEl);
     return;
   }
 
-  headerEl.textContent = `${data.total ?? 0} total`;
+  headerEl.textContent = `${data.total ?? data.items?.length ?? 0} total`;
 
   const kind = data.kind;
   const fragment = document.createDocumentFragment();
@@ -815,6 +812,8 @@ async function deleteMemory(force) {
 
 document.getElementById("refresh-btn").addEventListener("click", loadList);
 document.getElementById("kind-select").addEventListener("change", loadList);
+document.getElementById("ns-input").addEventListener("keydown", (e) => { if (e.key === "Enter") loadList(); });
+document.getElementById("prefix-input").addEventListener("keydown", (e) => { if (e.key === "Enter") loadList(); });
 
 document.getElementById("delete-btn").addEventListener("click", () => deleteMemory(false));
 document.getElementById("force-delete-btn").addEventListener("click", () => deleteMemory(true));
