@@ -57,7 +57,7 @@ export interface RecentItem {
 export interface HubItem extends RecentItem {
   in_degree: number;
 }
-export interface OrphanItem extends RecentItem {}
+export interface OrphanItem extends RecentItem { }
 export interface TagItem {
   tag: string;
   count: number;
