@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openDb } from "../src/db.js";
+import { openDb } from "../src/core/db.js";
 
 function fresh() {
   const dir = mkdtempSync(join(tmpdir(), "memfs-"));

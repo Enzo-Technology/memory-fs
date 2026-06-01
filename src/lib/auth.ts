@@ -1,4 +1,3 @@
-// THROWAWAY spike. Better Auth as an in-process OAuth 2.1 authorization server.
 import { betterAuth } from "better-auth";
 import { jwt } from "better-auth/plugins";
 import type { Database } from "better-sqlite3";
@@ -9,6 +8,17 @@ import { oauthProvider } from "@better-auth/oauth-provider";
 // discovery metadata advertises absolute, reachable endpoints. Defaults to localhost
 // for an initial local smoke.
 
+// The single source of truth for the AS<->RS trust contract. The Authorization
+// Server (below) stamps these into the tokens it issues; the Resource Server
+// (resource-server.ts) requires the same strings when it verifies a bearer.
+// Defined here, with the AS, because the AS is the authority that mints them; the
+// RS imports it (relying party depends on authority, not the reverse).
+export const authContract = (baseUrl: string) => ({
+  issuer: `${baseUrl}/api/auth`,
+  audience: `${baseUrl}/mcp`,
+  jwksUri: `${baseUrl}/api/auth/jwks`,
+});
+
 export const makeAuth = (db: Database, baseUrl: string) => {
   return betterAuth({
     database: db,
@@ -16,10 +26,10 @@ export const makeAuth = (db: Database, baseUrl: string) => {
     secret: process.env.BETTER_AUTH_SECRET,
     baseURL: baseUrl,
     socialProviders: {
-      google: { 
-            clientId: process.env.GOOGLE_CLIENT_ID as string, 
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET as string, 
-        }, 
+      google: {
+        clientId: process.env.GOOGLE_CLIENT_ID as string,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+      },
     },
     // CORS/CSRF origin trust (NOT redirect-uri allowlisting — DCR clients self-declare those).
     trustedOrigins: ["https://claude.ai", "https://claude.com", baseUrl, "http://localhost:3000"],
@@ -31,7 +41,7 @@ export const makeAuth = (db: Database, baseUrl: string) => {
         consentPage: "/consent",
         allowDynamicClientRegistration: true,
         allowUnauthenticatedClientRegistration: true,
-        validAudiences: [baseUrl, `${baseUrl}/mcp`],
+        validAudiences: [baseUrl, authContract(baseUrl).audience],
       })
     ] // required by oauth-provider (issues the JWT access tokens)
   })

@@ -12,7 +12,7 @@ interface JsonRpcResponse {
 
 async function callServer(messages: object[]): Promise<JsonRpcResponse[]> {
   const dir = mkdtempSync(join(tmpdir(), "memfs-"));
-  const child = spawn("node", ["dist/server.js"], {
+  const child = spawn("node", ["dist/index.js"], {
     env: { ...process.env, MEMORY_FS_DB: join(dir, "test.db") },
     stdio: ["pipe", "pipe", "ignore"],
   });

@@ -4,8 +4,6 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer, createConnection } from "node:net";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 function getFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -18,14 +16,13 @@ function getFreePort(): Promise<number> {
   });
 }
 
-async function spawnHttpServer(port: number, token: string): Promise<{ kill: () => void }> {
+async function spawnHttpServer(port: number): Promise<{ kill: () => void }> {
   const dir = mkdtempSync(join(tmpdir(), "memfs-http-"));
-  const child = spawn("node", ["dist/server.js"], {
+  const child = spawn("node", ["dist/index.js"], {
     env: {
       ...process.env,
       MEMORY_FS_DB: join(dir, "test.db"),
       MEMORY_FS_HTTP_PORT: String(port),
-      MEMORY_FS_TOKEN: token,
     },
     stdio: ["ignore", "ignore", "ignore"],
   });
@@ -55,23 +52,48 @@ async function spawnHttpServer(port: number, token: string): Promise<{ kill: () 
 }
 
 describe("server HTTP transport", () => {
-  it("returns 401 without Authorization header", async () => {
+  // The Resource Server's sole contribution at the HTTP layer is the bearer gate.
+  // The MCP tool surface itself is covered, auth-free, by the stdio smoke test —
+  // no need to mint an OAuth token here just to re-list the same 7 tools.
+  const initBody = JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "initialize",
+    params: {
+      protocolVersion: "2024-11-05",
+      capabilities: {},
+      clientInfo: { name: "test", version: "0" },
+    },
+  });
+
+  it("returns 401 without an Authorization header", async () => {
     const port = await getFreePort();
-    const server = await spawnHttpServer(port, "secret");
+    const server = await spawnHttpServer(port);
     try {
       const res = await fetch(`http://127.0.0.1:${port}/mcp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "initialize",
-          params: {
-            protocolVersion: "2024-11-05",
-            capabilities: {},
-            clientInfo: { name: "test", version: "0" },
-          },
-        }),
+        body: initBody,
+      });
+      expect(res.status).toBe(401);
+      // PRM pointer so the client knows where to start the OAuth flow.
+      expect(res.headers.get("WWW-Authenticate")).toMatch(/resource_metadata=/);
+    } finally {
+      server.kill();
+    }
+  });
+
+  it("returns 401 for an unverifiable bearer (no static-token bypass)", async () => {
+    const port = await getFreePort();
+    const server = await spawnHttpServer(port);
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer not-a-real-jwt",
+        },
+        body: initBody,
       });
       expect(res.status).toBe(401);
     } finally {
@@ -79,32 +101,22 @@ describe("server HTTP transport", () => {
     }
   });
 
-  it("lists 7 tools with valid Bearer token", async () => {
+  it("serves Protected Resource Metadata pointing at the trusted AS", async () => {
     const port = await getFreePort();
-    const server = await spawnHttpServer(port, "secret");
+    const server = await spawnHttpServer(port);
     try {
-      const transport = new StreamableHTTPClientTransport(
-        new URL(`http://127.0.0.1:${port}/mcp`),
-        {
-          requestInit: {
-            headers: { Authorization: "Bearer secret" },
-          },
-        },
+      const res = await fetch(
+        `http://127.0.0.1:${port}/.well-known/oauth-protected-resource`,
       );
-      const client = new Client({ name: "test", version: "0" });
-      await client.connect(transport);
-      const { tools } = await client.listTools();
-      const names = tools.map((t) => t.name).sort();
-      expect(names).toEqual([
-        "memory_backlinks",
-        "memory_browse",
-        "memory_delete",
-        "memory_link",
-        "memory_note",
-        "memory_read",
-        "memory_recall",
+      expect(res.status).toBe(200);
+      const prm = (await res.json()) as {
+        resource: string;
+        authorization_servers: string[];
+      };
+      expect(prm.resource).toBe(`http://127.0.0.1:${port}/mcp`);
+      expect(prm.authorization_servers).toEqual([
+        `http://127.0.0.1:${port}/api/auth`,
       ]);
-      await client.close();
     } finally {
       server.kill();
     }

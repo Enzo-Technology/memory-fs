@@ -2,8 +2,8 @@ import { describe, expect, it, beforeEach } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openDb } from "../src/db.js";
-import { MemoryStore } from "../src/store.js";
+import { openDb } from "../src/core/db.js";
+import { MemoryStore } from "../src/core/store.js";
 
 function freshStore() {
   const dir = mkdtempSync(join(tmpdir(), "memfs-"));

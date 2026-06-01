@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { slugify, deriveKey } from "../src/slug.js";
+import { slugify, deriveKey } from "../src/core/slug.js";
 
 describe("slugify", () => {
   it("lowercases and kebabs", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseWikilinks, type WikilinkRef } from "../src/wikilinks.js";
+import { parseWikilinks, type WikilinkRef } from "../src/core/wikilinks.js";
 
 describe("parseWikilinks", () => {
   const ofNs = "project:enzo";

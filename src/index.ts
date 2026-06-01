@@ -4,13 +4,15 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { createServer as createHttpServer } from "node:http";
 import { toNodeHandler } from "better-auth/node";
 import { getMigrations } from "better-auth/db/migration";
-import { createRemoteJWKSet, jwtVerify } from "jose";
 import { makeAuth } from "./lib/auth.js";
-import { z } from "zod";
+import {
+  makeAuthenticate,
+  serveProtectedResourceMetadata,
+} from "./lib/resource-server.js";
 import { openDb } from "./core/db.js";
 import { MemoryStore } from "./core/store.js";
 import { buildMcpServer } from "./lib/mcp-server.js";
-import { serveUiAsset } from "./lib/ui/pages.js";
+import { serveAuthUi } from "./lib/auth-ui.js";
 
 const dbPath = process.env.MEMORY_FS_DB ?? `${process.env.HOME}/.memory-fs/memory.db`;
 console.error(`[memory-fs] starting pid=${process.pid} db=${dbPath} node=${process.version}`);
@@ -40,12 +42,6 @@ if (toBeCreated.length || toBeAdded.length) await runMigrations();
 const httpPort = process.env.MEMORY_FS_HTTP_PORT
 
 if (httpPort) {
-  const token = process.env.MEMORY_FS_TOKEN;
-  if (!token) {
-    console.error("[memory-fs] MEMORY_FS_TOKEN must be set when MEMORY_FS_HTTP_PORT is set");
-    process.exit(1);
-  }
-
   const parsedPort = parseInt(httpPort, 10);
   if (isNaN(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
     console.error(`[memory-fs] MEMORY_FS_HTTP_PORT must be a number between 1 and 65535, got: ${httpPort}`);
@@ -53,60 +49,28 @@ if (httpPort) {
   }
 
   const authHandler = toNodeHandler(auth);
-
-  // Resource Server: verify the bearer on /mcp. Static token = legacy shared identity;
-  // otherwise a Better-Auth-issued JWT, verified locally against the JWKS (audience-bound).
-  const jwks = createRemoteJWKSet(new URL(`${BASE_URL}/api/auth/jwks`));
-  const authenticate = async (
-    req: import("node:http").IncomingMessage,
-  ): Promise<{ id: string; source: "static" | "oauth" } | null> => {
-    const authz = req.headers["authorization"];
-    if (typeof authz !== "string" || !authz.startsWith("Bearer ")) return null;
-    const bearer = authz.slice("Bearer ".length);
-    if (bearer === token) return { id: "shared", source: "static" };
-    try {
-      const { payload } = await jwtVerify(bearer, jwks, {
-        issuer: `${BASE_URL}/api/auth`,
-        // The MCP client requests a token for the /mcp resource (confirmed in the
-        // Inspector's authorize request: resource=<BASE_URL>/mcp), so the token's aud is
-        // <BASE_URL>/mcp. Must match what auth.ts validAudiences accepts.
-        audience: `${BASE_URL}/mcp`,
-      });
-      return { id: String(payload.sub), source: "oauth" };
-    } catch {
-      return null;
-    }
-  };
+  const authenticate = makeAuthenticate(BASE_URL);
 
   const httpServer = createHttpServer(async (req, res) => {
     const url = req.url ?? "/";
 
-
-    // Forward to Better Auth: its /api/auth/* routes, plus the RFC-8414 suffixed root alias
-    // for AS metadata (/.well-known/oauth-authorization-server/api/auth) that MCP clients use.
+    // Authorization Server (Better Auth): its /api/auth/* routes, plus the
+    // RFC-8414 suffixed alias for AS metadata that MCP clients fetch.
     if (url.startsWith("/api/auth") || url.startsWith("/.well-known/oauth-authorization-server")) {
       return authHandler(req, res);
     }
 
-    // PRM is the one discovery doc Better Auth doesn't serve — hand-build it.
+    // Resource Server: advertise the AS we trust (PRM).
     if (url.startsWith("/.well-known/oauth-protected-resource")) {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({
-        resource: `${BASE_URL}/mcp`,
-        authorization_servers: [`${BASE_URL}/api/auth`],
-        bearer_methods_supported: ["header"],
-        scopes_supported: ["openid", "profile", "email", "offline_access"],
-      }));
-      return;
+      return serveProtectedResourceMetadata(BASE_URL, res);
     }
 
-    // Static OAuth UI assets (sign-in / consent pages + their scripts). Public, so this
-    // must come before the /mcp auth gate below.
-    if (serveUiAsset(url, res)) return;
+    // AS login/consent pages (public) — must precede the /mcp auth gate below.
+    if (serveAuthUi(url, res)) return;
 
-    // Everything else is the MCP Resource Server — require a valid bearer.
-    const actor = await authenticate(req);
-    if (!actor) {
+    // Resource Server: everything else requires a valid bearer.
+    const principal = await authenticate(req);
+    if (!principal) {
       res.writeHead(401, {
         "WWW-Authenticate": `Bearer resource_metadata="${BASE_URL}/.well-known/oauth-protected-resource"`,
       });
