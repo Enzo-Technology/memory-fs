@@ -13,6 +13,7 @@ interface JsonRpcResponse {
 async function callServer(messages: object[]): Promise<JsonRpcResponse[]> {
   const dir = mkdtempSync(join(tmpdir(), "memfs-"));
   const child = spawn("node", ["dist/index.js"], {
+    // Deliberately no BETTER_AUTH_SECRET: stdio is auth-free and must boot without it.
     env: { ...process.env, MEMORY_FS_DB: join(dir, "test.db") },
     stdio: ["pipe", "pipe", "ignore"],
   });

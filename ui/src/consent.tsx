@@ -29,3 +29,9 @@ import { StrictMode } from "react";
       </main>
     );
   }
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <Consent />
+  </StrictMode>,
+);

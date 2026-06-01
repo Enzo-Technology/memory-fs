@@ -83,6 +83,13 @@ export interface Backlink {
 
 const DUP_BM25_MAX = 0;
 
+// First non-empty line of a memory, trimmed and capped. For an atomic note this
+// line is effectively the summary, which is why no stored LLM summary is needed.
+function snippet(content: string): string {
+  const line = content.split("\n").find((l) => l.trim().length > 0) ?? "";
+  return line.trim().slice(0, 160);
+}
+
 export class MemoryStore {
   private deleteAutoLinks: Database.Statement;
   private insertLink: Database.Statement;
@@ -96,7 +103,10 @@ export class MemoryStore {
     );
   }
 
-  note(input: NoteInput): NoteResult {
+  // `author` is the verified token subject (or null over stdio). It is a separate
+  // argument, never part of NoteInput — attribution must come from the principal
+  // the Resource Server verified, not from agent-supplied tool args.
+  note(input: NoteInput, author: string | null = null): NoteResult {
     const namespace = input.namespace;
     const key = input.key ?? deriveKey(input.content);
     const onConflict: OnConflict = input.on_conflict ?? "overwrite";
@@ -134,14 +144,15 @@ export class MemoryStore {
     const upsert = this.db.transaction((): MemoryRow => {
       const row = this.db
         .prepare<unknown[], MemoryRow>(
-          `INSERT INTO memories (namespace, key, type, content, tags, metadata, source)
-           VALUES (@namespace, @key, @type, @content, @tags, @metadata, @source)
+          `INSERT INTO memories (namespace, key, type, content, tags, metadata, source, created_by, updated_by)
+           VALUES (@namespace, @key, @type, @content, @tags, @metadata, @source, @author, @author)
            ON CONFLICT(namespace, key) DO UPDATE SET
              type        = excluded.type,
              content     = excluded.content,
              tags        = excluded.tags,
              metadata    = excluded.metadata,
              source      = excluded.source,
+             updated_by  = excluded.updated_by,
              updated_at  = datetime('now'),
              accessed_at = datetime('now')
            RETURNING *`,
@@ -154,6 +165,7 @@ export class MemoryStore {
           tags: tagsJson,
           metadata: metadataJson,
           source: input.source ?? null,
+          author,
         });
       if (!row) throw new Error("note: upsert failed");
       if (input.tags !== undefined) this.applyTags(row.id, input.tags);

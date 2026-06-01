@@ -23,6 +23,7 @@ async function spawnHttpServer(port: number): Promise<{ kill: () => void }> {
       ...process.env,
       MEMORY_FS_DB: join(dir, "test.db"),
       MEMORY_FS_HTTP_PORT: String(port),
+      BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
     },
     stdio: ["ignore", "ignore", "ignore"],
   });

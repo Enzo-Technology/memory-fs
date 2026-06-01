@@ -6,3 +6,7 @@ dist
 .DS_Store
 .env
 *.env
+
+# eval run artifacts — keep the dir (.gitkeep), ignore the generated results
+eval/results/*.json
+eval/results/SUMMARY.*

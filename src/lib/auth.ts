@@ -20,10 +20,14 @@ export const authContract = (baseUrl: string) => ({
 });
 
 export const makeAuth = (db: Database, baseUrl: string) => {
+  // Boundary check: a missing secret makes Better Auth fall back to a default
+  // signing key, which silently mints forgeable tokens. Crash instead.
+  const secret = process.env.BETTER_AUTH_SECRET;
+  if (!secret) throw new Error("BETTER_AUTH_SECRET is required (32+ random chars)");
+
   return betterAuth({
     database: db,
-    // Throwaway secret — fine for a prototype, never reuse.
-    secret: process.env.BETTER_AUTH_SECRET,
+    secret,
     baseURL: baseUrl,
     socialProviders: {
       google: {
@@ -33,7 +37,9 @@ export const makeAuth = (db: Database, baseUrl: string) => {
     },
     // CORS/CSRF origin trust (NOT redirect-uri allowlisting — DCR clients self-declare those).
     trustedOrigins: ["https://claude.ai", "https://claude.com", baseUrl, "http://localhost:3000"],
-    emailAndPassword: { enabled: true },
+    // Google-only: the AS issues no password credentials. Sign-up/sign-in
+    // happens through the social provider above, nothing else.
+    emailAndPassword: { enabled: false },
     plugins: [
       jwt(),
       oauthProvider({

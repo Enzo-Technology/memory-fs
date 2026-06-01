@@ -1,9 +1,10 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { resolve } from "node:path";
 
+const dir = import.meta.dirname; // .../ui — config sits next to the html entries
 
 export default defineConfig({
-
     plugins: [react()],
     base: "/",
     build: {
@@ -11,15 +12,12 @@ export default defineConfig({
         emptyOutDir: true,
         rollupOptions: {
             input: {
-                "sign-in": "sign-in.html", consent:
-                    "consent.html"
+                "sign-in": resolve(dir, "sign-in.html"),
+                consent: resolve(dir, "consent.html"),
             },
         },
     },
-    server: {
-        proxy: {
-            "/api/auth": "http://127.0.0.1:3000",
-            "/mcp": "http://127.0.0.1:3000",
-        },
-    },
+    // No dev server here on purpose: `npm run dev:ui` is `vite build --watch`, so the
+    // Node server (src/lib/auth-ui.ts) serves these pages same-origin with /api/auth in
+    // both dev and prod. One origin = no cookie/redirect_uri drift between dev and prod.
 });

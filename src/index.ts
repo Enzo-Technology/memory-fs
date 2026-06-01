@@ -14,14 +14,12 @@ import { MemoryStore } from "./core/store.js";
 import { buildMcpServer } from "./lib/mcp-server.js";
 import { serveAuthUi } from "./lib/auth-ui.js";
 
-const dbPath = process.env.MEMORY_FS_DB ?? `${process.env.HOME}/.memory-fs/memory.db`;
-console.error(`[memory-fs] starting pid=${process.pid} db=${dbPath} node=${process.version}`);
 
 let db;
 try {
   db = openDb();
 } catch (e) {
-  console.error(`[memory-fs] failed to open db at ${dbPath}: ${(e as Error).message}`);
+  console.error(`[memory-fs] failed to open db`);
   process.exit(1);
 }
 const store = new MemoryStore(db);
@@ -34,11 +32,6 @@ const BASE_URL =
   `http://127.0.0.1:${process.env.MEMORY_FS_HTTP_PORT ??
   3000}`;
 
-const auth = makeAuth(db, BASE_URL);
-
-const { toBeCreated, toBeAdded, runMigrations } = await getMigrations(auth.options);
-if (toBeCreated.length || toBeAdded.length) await runMigrations();
-
 const httpPort = process.env.MEMORY_FS_HTTP_PORT
 
 if (httpPort) {
@@ -47,6 +40,12 @@ if (httpPort) {
     console.error(`[memory-fs] MEMORY_FS_HTTP_PORT must be a number between 1 and 65535, got: ${httpPort}`);
     process.exit(1);
   }
+
+  // Auth setup is HTTP-only: stdio is a local single-user transport with no bearer
+  // path, so it must boot without a BETTER_AUTH_SECRET or Better Auth's tables.
+  const auth = makeAuth(db, BASE_URL);
+  const { toBeCreated, toBeAdded, runMigrations } = await getMigrations(auth.options);
+  if (toBeCreated.length || toBeAdded.length) await runMigrations();
 
   const authHandler = toNodeHandler(auth);
   const authenticate = makeAuthenticate(BASE_URL);
@@ -79,7 +78,7 @@ if (httpPort) {
     }
 
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-    const mcpServer = buildMcpServer(store);
+    const mcpServer = buildMcpServer(store, principal.sub);
     res.on("close", () => { transport.close().catch(() => { }); });
     mcpServer.connect(transport).then(() => {
       return transport.handleRequest(req, res);

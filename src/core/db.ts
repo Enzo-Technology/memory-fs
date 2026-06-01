@@ -14,6 +14,8 @@ export interface Memory {
   tags: string[];
   metadata: Record<string, unknown>;
   source: string | null;
+  created_by: string | null;
+  updated_by: string | null;
   created_at: string;
   updated_at: string;
   accessed_at: string;
@@ -28,6 +30,8 @@ export interface MemoryRow {
   tags: string;
   metadata: string;
   source: string | null;
+  created_by: string | null;
+  updated_by: string | null;
   created_at: string;
   updated_at: string;
   accessed_at: string;
@@ -57,6 +61,8 @@ function migrate(db: Database.Database): void {
       tags        TEXT NOT NULL DEFAULT '[]',
       metadata    TEXT NOT NULL DEFAULT '{}',
       source      TEXT,
+      created_by  TEXT,
+      updated_by  TEXT,
       created_at  TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
       accessed_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -113,6 +119,24 @@ function migrate(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag);
   `);
+
+  // Additive migration for stores created before attribution columns existed.
+  // CREATE TABLE IF NOT EXISTS above only covers fresh DBs; existing rows need
+  // ADD COLUMN. Idempotent: skipped once the column is present.
+  addColumnIfMissing(db, "memories", "created_by", "TEXT");
+  addColumnIfMissing(db, "memories", "updated_by", "TEXT");
+}
+
+function addColumnIfMissing(
+  db: Database.Database,
+  table: string,
+  column: string,
+  type: string,
+): void {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
 }
 
 export function rowToMemory(r: MemoryRow): Memory {

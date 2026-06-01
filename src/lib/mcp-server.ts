@@ -15,7 +15,10 @@ const err = (message: string) => ({
     isError: true,
 });
 
-export function buildMcpServer(store: MemoryStore): McpServer {
+// `author` is the verified principal's id (token sub) for this request, or null
+// over stdio. It is bound here, not taken from tool args, so writes are attributed
+// to whoever the Resource Server authenticated.
+export function buildMcpServer(store: MemoryStore, author: string | null = null): McpServer {
     const server = new McpServer({ name: "memory-fs", version: "0.1.0" });
 
     server.registerTool(
@@ -38,7 +41,7 @@ export function buildMcpServer(store: MemoryStore): McpServer {
                 on_conflict: onConflict.optional().describe("behavior if (namespace, key) already exists; default 'overwrite'"),
             },
         },
-        async (args) => ok(store.note(args)),
+        async (args) => ok(store.note(args, author)),
     );
 
     server.registerTool(
