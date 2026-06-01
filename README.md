@@ -74,4 +74,4 @@ See [`CLAUDE.md`](CLAUDE.md) — bias to no, crash on impossible states, surface
 
 ## License
 
-MIT.
+[Apache-2.0](LICENSE). © 2026 Ben Graney Green / Enzo Technology.
