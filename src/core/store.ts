@@ -5,11 +5,17 @@ import {
   type MemoryType,
   rowToMemory,
 } from "./db.js";
-import { deriveKey } from "./slug.js";
+import { deriveKey, normalizeKey, normalizeNamespace } from "./slug.js";
 import { parseWikilinks } from "./wikilinks.js";
 
 export type OnConflict = "overwrite" | "append" | "error";
-export type BrowseKind = "index" | "recent" | "hubs" | "orphans" | "tags";
+export type BrowseKind =
+  | "index"
+  | "recent"
+  | "hubs"
+  | "orphans"
+  | "tags"
+  | "namespaces";
 
 export interface NoteInput {
   namespace: string;
@@ -26,10 +32,12 @@ export interface NearDuplicate {
   namespace: string;
   key: string;
   score: number;
+  snippet: string;
 }
 
 export interface NoteResult extends Memory {
   near_duplicate_warning?: NearDuplicate[];
+  size_warning?: string;
 }
 
 export interface RecallInput {
@@ -53,6 +61,7 @@ export interface RecentItem {
   key: string;
   type: MemoryType;
   updated_at: string;
+  snippet: string;
 }
 export interface HubItem extends RecentItem {
   in_degree: number;
@@ -62,9 +71,13 @@ export interface TagItem {
   tag: string;
   count: number;
 }
+export interface NamespaceItem {
+  namespace: string;
+  count: number;
+}
 export interface IndexSection {
-  section: "recent" | "hubs" | "tags";
-  items: RecentItem[] | HubItem[] | TagItem[];
+  section: "recent" | "tags" | "namespaces";
+  items: RecentItem[] | TagItem[] | NamespaceItem[];
 }
 
 export type BrowseResult =
@@ -72,16 +85,44 @@ export type BrowseResult =
   | { kind: "recent"; total: number; items: RecentItem[] }
   | { kind: "hubs"; total: number; items: HubItem[] }
   | { kind: "orphans"; total: number; items: OrphanItem[] }
-  | { kind: "tags"; total: number; items: TagItem[] };
+  | { kind: "tags"; total: number; items: TagItem[] }
+  | { kind: "namespaces"; total: number; items: NamespaceItem[] };
 
 export interface Backlink {
   from_namespace: string;
   from_key: string;
   relation: string;
   source: "auto" | "manual";
+  snippet: string;
+}
+
+// A linked record in a read's neighbourhood (outbound child or inbound backlink).
+export interface Neighbour {
+  namespace: string;
+  key: string;
+  relation: string;
+  snippet: string;
+}
+
+// A read returns the record plus its immediate neighbourhood, so navigating a
+// hub-note (read it, see its children) is one call instead of N follow-up reads.
+export interface ReadResult extends Memory {
+  children: Neighbour[];
+  backlinks: Neighbour[];
 }
 
 const DUP_BM25_MAX = 0;
+// Depth-1 cap on each side of a read's neighbourhood — bound the payload so a
+// high-degree hub doesn't dump every child.
+const NEIGHBOUR_CAP = 20;
+// Above this word count a non-'reference' memory gets a non-blocking nudge to
+// stay atomic. A length check, not an LLM call — atomic notes are the default;
+// 'reference' is the explicit longform escape hatch.
+const SIZE_WARN_WORDS = 200;
+
+function wordCount(content: string): number {
+  return content.trim().split(/\s+/).filter(Boolean).length;
+}
 
 // First non-empty line of a memory, trimmed and capped. For an atomic note this
 // line is effectively the summary, which is why no stored LLM summary is needed.
@@ -107,8 +148,8 @@ export class MemoryStore {
   // argument, never part of NoteInput — attribution must come from the principal
   // the Resource Server verified, not from agent-supplied tool args.
   note(input: NoteInput, author: string | null = null): NoteResult {
-    const namespace = input.namespace;
-    const key = input.key ?? deriveKey(input.content);
+    const namespace = normalizeNamespace(input.namespace);
+    const key = input.key ? normalizeKey(input.key) : deriveKey(input.content);
     const onConflict: OnConflict = input.on_conflict ?? "overwrite";
 
     const existing = this.db
@@ -176,6 +217,11 @@ export class MemoryStore {
     const row = upsert();
     const result: NoteResult = rowToMemory(row);
     if (dup.length) result.near_duplicate_warning = dup;
+    if (type !== "reference" && wordCount(content) > SIZE_WARN_WORDS) {
+      result.size_warning =
+        `This memory is ${wordCount(content)} words. Memories are best kept atomic — ` +
+        `consider splitting into linked [[notes]], or use type:'reference' for durable longform.`;
+    }
     return result;
   }
 
@@ -194,7 +240,9 @@ export class MemoryStore {
   ): void {
     this.deleteAutoLinks.run(memoryId);
     const refs = parseWikilinks(content, sourceNamespace);
-    for (const r of refs) this.insertLink.run(memoryId, r.namespace, r.key);
+    for (const r of refs) {
+      this.insertLink.run(memoryId, normalizeNamespace(r.namespace), normalizeKey(r.key));
+    }
   }
 
   private findNearDuplicates(
@@ -208,9 +256,9 @@ export class MemoryStore {
     const rows = this.db
       .prepare<
         unknown[],
-        { namespace: string; key: string; rank: number }
+        { namespace: string; key: string; rank: number; content: string }
       >(
-        `SELECT m.namespace, m.key, bm25(memories_fts) AS rank
+        `SELECT m.namespace, m.key, m.content, bm25(memories_fts) AS rank
          FROM memories_fts
          JOIN memories m ON m.id = memories_fts.rowid
          WHERE memories_fts MATCH @q
@@ -227,7 +275,12 @@ export class MemoryStore {
       });
     return rows
       .filter((r) => r.rank < DUP_BM25_MAX)
-      .map((r) => ({ namespace: r.namespace, key: r.key, score: -r.rank }));
+      .map((r) => ({
+        namespace: r.namespace,
+        key: r.key,
+        score: -r.rank,
+        snippet: snippet(r.content),
+      }));
   }
 
   private ftsQuery(raw: string): string {
@@ -239,7 +292,9 @@ export class MemoryStore {
       .join(" OR ") || `"${raw}"`;
   }
 
-  read(namespace: string, key: string): Memory | null {
+  read(namespace: string, key: string): ReadResult | null {
+    namespace = normalizeNamespace(namespace);
+    key = normalizeKey(key);
     const row = this.db
       .prepare<unknown[], MemoryRow>(
         `UPDATE memories SET accessed_at = datetime('now')
@@ -247,7 +302,42 @@ export class MemoryStore {
          RETURNING *`,
       )
       .get(namespace, key);
-    return row ? rowToMemory(row) : null;
+    if (!row) return null;
+    return {
+      ...rowToMemory(row),
+      children: this.outboundNeighbours(row.id),
+      backlinks: this.inboundNeighbours(namespace, key),
+    };
+  }
+
+  // Outbound links to *existing* records (dangling targets are omitted — they
+  // aren't records, so they carry no snippet).
+  private outboundNeighbours(fromId: number): Neighbour[] {
+    const rows = this.db
+      .prepare<unknown[], Omit<Neighbour, "snippet"> & { content: string }>(
+        `SELECT l.to_namespace AS namespace, l.to_key AS key, l.relation, m.content
+         FROM links l
+         JOIN memories m ON m.namespace = l.to_namespace AND m.key = l.to_key
+         WHERE l.from_id = @fromId
+         ORDER BY m.updated_at DESC
+         LIMIT @limit`,
+      )
+      .all({ fromId, limit: NEIGHBOUR_CAP });
+    return rows.map(({ content, ...n }) => ({ ...n, snippet: snippet(content) }));
+  }
+
+  private inboundNeighbours(namespace: string, key: string): Neighbour[] {
+    const rows = this.db
+      .prepare<unknown[], Omit<Neighbour, "snippet"> & { content: string }>(
+        `SELECT m.namespace, m.key, l.relation, m.content
+         FROM links l
+         JOIN memories m ON m.id = l.from_id
+         WHERE l.to_namespace = @ns AND l.to_key = @key
+         ORDER BY m.updated_at DESC
+         LIMIT @limit`,
+      )
+      .all({ ns: namespace, key, limit: NEIGHBOUR_CAP });
+    return rows.map(({ content, ...n }) => ({ ...n, snippet: snippet(content) }));
   }
 
   recall(input: RecallInput): Memory[] {
@@ -255,7 +345,7 @@ export class MemoryStore {
     const params: Record<string, unknown> = { query: input.query };
     if (input.namespace) {
       where.push("m.namespace = @namespace");
-      params.namespace = input.namespace;
+      params.namespace = normalizeNamespace(input.namespace);
     }
     if (input.type) {
       where.push("m.type = @type");
@@ -289,6 +379,7 @@ export class MemoryStore {
 
   browse(input: BrowseInput): BrowseResult {
     const limit = input.limit ?? 20;
+    const ns = input.namespace ? normalizeNamespace(input.namespace) : undefined;
     const total = (
       this.db.prepare(`SELECT COUNT(*) AS c FROM memories`).get() as { c: number }
     ).c;
@@ -297,27 +388,33 @@ export class MemoryStore {
         return {
           kind: "recent",
           total,
-          items: this.recent(limit, input.namespace, input.prefix),
+          items: this.recent(limit, ns, input.prefix),
         };
       case "hubs":
-        return { kind: "hubs", total, items: this.hubs(limit, input.namespace) };
+        return { kind: "hubs", total, items: this.hubs(limit, ns) };
       case "orphans":
         return {
           kind: "orphans",
           total,
-          items: this.orphans(limit, input.namespace),
+          items: this.orphans(limit, ns),
         };
       case "tags":
         return { kind: "tags", total, items: this.tagVocabulary(input.prefix, limit) };
+      case "namespaces":
+        return {
+          kind: "namespaces",
+          total,
+          items: this.namespaceVocabulary(input.prefix, limit),
+        };
       case "index":
       default: {
         const sections: IndexSection[] = [
           {
             section: "recent",
-            items: this.recent(5, input.namespace, input.prefix),
+            items: this.recent(5, ns, input.prefix),
           },
-          { section: "hubs", items: this.hubs(5, input.namespace) },
           { section: "tags", items: this.tagVocabulary(input.prefix, 10) },
+          { section: "namespaces", items: this.namespaceVocabulary(input.prefix, 10) },
         ];
         return { kind: "index", total, items: sections };
       }
@@ -336,19 +433,22 @@ export class MemoryStore {
       params.prefix = `${prefix}%`;
     }
     const sql =
-      `SELECT namespace, key, type, updated_at FROM memories` +
+      `SELECT namespace, key, type, updated_at, content FROM memories` +
       (where.length ? ` WHERE ${where.join(" AND ")}` : "") +
       ` ORDER BY updated_at DESC LIMIT @limit`;
-    return this.db.prepare<unknown[], RecentItem>(sql).all(params);
+    const rows = this.db
+      .prepare<unknown[], Omit<RecentItem, "snippet"> & { content: string }>(sql)
+      .all(params);
+    return rows.map(({ content, ...item }) => ({ ...item, snippet: snippet(content) }));
   }
 
   private hubs(limit: number, namespace?: string): HubItem[] {
     const where = namespace ? "WHERE m.namespace = @namespace" : "";
     const params: Record<string, unknown> = { limit };
     if (namespace) params.namespace = namespace;
-    return this.db
-      .prepare<unknown[], HubItem>(
-        `SELECT m.namespace, m.key, m.type, m.updated_at,
+    const rows = this.db
+      .prepare<unknown[], Omit<HubItem, "snippet"> & { content: string }>(
+        `SELECT m.namespace, m.key, m.type, m.updated_at, m.content,
                 COALESCE(agg.in_degree, 0) AS in_degree
          FROM memories m
          LEFT JOIN (
@@ -362,15 +462,16 @@ export class MemoryStore {
          LIMIT @limit`,
       )
       .all(params);
+    return rows.map(({ content, ...item }) => ({ ...item, snippet: snippet(content) }));
   }
 
   private orphans(limit: number, namespace?: string): OrphanItem[] {
     const where = namespace ? "AND m.namespace = @namespace" : "";
     const params: Record<string, unknown> = { limit };
     if (namespace) params.namespace = namespace;
-    return this.db
-      .prepare<unknown[], OrphanItem>(
-        `SELECT m.namespace, m.key, m.type, m.updated_at FROM memories m
+    const rows = this.db
+      .prepare<unknown[], Omit<OrphanItem, "snippet"> & { content: string }>(
+        `SELECT m.namespace, m.key, m.type, m.updated_at, m.content FROM memories m
          WHERE NOT EXISTS (SELECT 1 FROM links lo WHERE lo.from_id = m.id)
            AND NOT EXISTS (SELECT 1 FROM links li
                             WHERE li.to_namespace = m.namespace
@@ -380,6 +481,7 @@ export class MemoryStore {
          LIMIT @limit`,
       )
       .all(params);
+    return rows.map(({ content, ...item }) => ({ ...item, snippet: snippet(content) }));
   }
 
   private tagVocabulary(prefix: string | undefined, limit: number): TagItem[] {
@@ -397,7 +499,30 @@ export class MemoryStore {
       .all(params);
   }
 
+  // The one sanctioned identifier-only view alongside tags: an explicit
+  // "show me the namespaces" structural query. `prefix` filters namespaces
+  // (e.g. 'voice:' lists every voice:* scope).
+  private namespaceVocabulary(
+    prefix: string | undefined,
+    limit: number,
+  ): NamespaceItem[] {
+    const where = prefix ? "WHERE namespace LIKE @prefix" : "";
+    const params: Record<string, unknown> = { limit };
+    if (prefix) params.prefix = `${prefix}%`;
+    return this.db
+      .prepare<unknown[], NamespaceItem>(
+        `SELECT namespace, COUNT(*) AS count FROM memories
+         ${where}
+         GROUP BY namespace
+         ORDER BY count DESC, namespace ASC
+         LIMIT @limit`,
+      )
+      .all(params);
+  }
+
   del(namespace: string, key: string, force = false): boolean {
+    namespace = normalizeNamespace(namespace);
+    key = normalizeKey(key);
     const row = this.db
       .prepare<unknown[], { id: number }>(
         `SELECT id FROM memories WHERE namespace = ? AND key = ?`,
@@ -427,6 +552,10 @@ export class MemoryStore {
     toKey: string,
     relation = "related",
   ): boolean {
+    fromNamespace = normalizeNamespace(fromNamespace);
+    fromKey = normalizeKey(fromKey);
+    toNamespace = normalizeNamespace(toNamespace);
+    toKey = normalizeKey(toKey);
     const from = this.db
       .prepare<unknown[], { id: number }>(
         `SELECT id FROM memories WHERE namespace = ? AND key = ?`,
@@ -446,17 +575,21 @@ export class MemoryStore {
   }
 
   backlinks(namespace: string, key: string): Backlink[] {
-    return this.db
-      .prepare<unknown[], Backlink>(
+    namespace = normalizeNamespace(namespace);
+    key = normalizeKey(key);
+    const rows = this.db
+      .prepare<unknown[], Omit<Backlink, "snippet"> & { content: string }>(
         `SELECT m.namespace AS from_namespace,
                 m.key       AS from_key,
                 l.relation,
-                l.source
+                l.source,
+                m.content
          FROM links l
          JOIN memories m ON m.id = l.from_id
          WHERE l.to_namespace = ? AND l.to_key = ?
          ORDER BY m.updated_at DESC`,
       )
       .all(namespace, key);
+    return rows.map(({ content, ...rest }) => ({ ...rest, snippet: snippet(content) }));
   }
 }

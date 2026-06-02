@@ -51,8 +51,20 @@ regressing the ergonomic.
 - **Hub-ness is derived, not stored** — computed from the `links` table
   (out-links = children, in-links = backlinks). No `is_hub` column to drift.
   Convention: child notes link back to their parent hub, which gives the hub
-  in-degree so the existing `hubs` view and `backlinks` surface it without new
-  out-degree/MOC detection.
+  in-degree so `backlinks` surfaces it without new out-degree/MOC detection.
+- **`hubs`/`orphans` demoted off the agent surface** — they're curation/gardening
+  views ("what's important," "what's stale"), not task tools, and `hubs` carries
+  an in-degree-vs-out-degree confusion that would mislead an agent. Removed from
+  the MCP `browseKind` enum (now `index | recent | tags | namespaces`) and from
+  the `index` sections (now recent + tags + namespaces). `store.browse()` still
+  *supports* both kinds — they stay tested and re-arm for the UI / a future
+  curation layer — so this is interface curation, not deletion. An agent's
+  hub-awareness comes instead from the `read` neighbourhood + `backlinks`.
+- **Normalization at every boundary (#4)** — `namespace` (per-`:`-segment slug,
+  required) and `key` (slug; provided or auto-derived) are normalized on read
+  *and* write via `slug.ts`, including auto-extracted wikilink targets. Idempotent,
+  so addressing stays consistent and the rewrite is invisible to the caller. We
+  normalize rather than reject, matching the autogen/affordance stance.
 - **Atomicity forcing function** — a non-blocking `size_warning` on write when
   `content` exceeds a threshold and `type !== 'reference'`, nudging "split into
   linked atomic notes." `reference` is the explicit longform escape hatch.

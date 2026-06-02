@@ -4,7 +4,18 @@ import type { MemoryStore } from "../core/store";
 
 const memoryType = z.enum(["user", "feedback", "project", "reference", "note"]);
 const onConflict = z.enum(["overwrite", "append", "error"]);
-const browseKind = z.enum(["index", "recent", "hubs", "orphans", "tags"]);
+const browseKind = z.enum(["index", "recent", "tags", "namespaces"]);
+
+// Shared field hints so the same concept reads identically across all tools.
+const NS_DESC =
+    "logical scope, e.g. 'user', 'project:web', 'agent:reviewer' " +
+    "(lowercased; ':' separates scope levels)";
+const NS_FILTER_DESC = "restrict results to this namespace";
+const KEY_DESC = "stable slug identifying the record within its namespace (normalized to a slug)";
+const TYPE_DESC =
+    "kind of memory: 'user' (who the user is), 'feedback' (how to work), " +
+    "'project' (ongoing work/goals), 'reference' (durable reference docs — use " +
+    "for longer material), 'note' (default; a single atomic fact)";
 
 const ok = (data: unknown) => ({
     content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
@@ -29,15 +40,19 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
                 "Write a durable fact, decision, or preference to the SHARED memory store — visible " +
                 "to all agents, machines, and teammates, unlike your local session memory. " +
                 "Auto-extracts [[wikilinks]] and warns on near-duplicates; key auto-derives from " +
-                "content if omitted. Namespace is a logical scope like 'user', 'project:enzo', or " +
+                "content if omitted. Namespace is a logical scope like 'user', 'project:web', or " +
                 "'agent:reviewer'. Use when the user states something lasting, makes a decision, or " +
-                "asks to remember; not for transient task state. Never store secrets or PII.",
+                "asks to remember; not for transient task state. Keep each memory atomic; for a " +
+                "topic with several facts, write a short hub note that links [[the atoms]] so they're " +
+                "discoverable together. Never store secrets or PII.",
             inputSchema: {
                 content: z.string().min(1).describe("markdown body of the memory; can include [[wikilinks]]"),
-                namespace: z.string().min(1).describe("logical scope, e.g. 'user', 'project:enzo'"),
-                key: z.string().optional().describe("stable slug; auto-derived from content if omitted"),
-                type: memoryType.optional(),
+                namespace: z.string().min(1).describe(NS_DESC),
+                key: z.string().optional().describe("stable slug; normalized to a slug, or auto-derived from content if omitted"),
+                type: memoryType.optional().describe(TYPE_DESC),
                 tags: z.array(z.string()).optional().describe("freeform labels for filtering"),
+                metadata: z.record(z.string(), z.unknown()).optional().describe("arbitrary structured data attached to the record"),
+                source: z.string().optional().describe("where this memory came from, e.g. a URL or document reference"),
                 on_conflict: onConflict.optional().describe("behavior if (namespace, key) already exists; default 'overwrite'"),
             },
         },
@@ -50,16 +65,15 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
             title: "Search memories",
             annotations: { readOnlyHint: true },
             description:
-                "Search the SHARED memory store; returns full ranked records (hubs promoted), not " +
-                "snippets. Use when the user references prior context, decisions, or deadlines you " +
-                "weren't told this session ('did we already decide on auth?', 'what's the merge " +
-                "freeze date?'). FTS5 syntax: phrases (\"merge freeze\"), boolean (auth AND legal), " +
-                "prefix (auth*).",
+                "Search the SHARED memory store by full-text query; returns full ranked records " +
+                "(records with inbound links rank first), not just snippets. Use when the user " +
+                "references prior context, decisions, or deadlines you weren't told this session. " +
+                "FTS5 syntax: phrases (\"exact phrase\"), boolean (X AND Y), prefix (term*).",
             inputSchema: {
                 query: z.string().min(1).describe("FTS5 search expression"),
-                namespace: z.string().optional(),
-                type: memoryType.optional(),
-                tags: z.array(z.string()).optional(),
+                namespace: z.string().optional().describe(NS_FILTER_DESC),
+                type: memoryType.optional().describe("restrict results to this type"),
+                tags: z.array(z.string()).optional().describe("restrict results to records with all these tags"),
                 since: z.string().optional().describe("ISO date; only records updated since"),
                 limit: z.number().int().positive().max(20).optional().describe("default 5"),
             },
@@ -74,14 +88,14 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
             annotations: { readOnlyHint: true },
             description:
                 "Orient in the SHARED store without a query. kind='index' for an overview; 'recent' " +
-                "for last-updated; 'hubs' for highly-linked records (usually the most important); " +
-                "'orphans' for unlinked records (often stale); 'tags' for the tag vocabulary with " +
-                "counts. Use to summarize what exists, find structural records, or filter by " +
-                "tag/namespace.",
+                "for last-updated records (each with a snippet); 'tags' for the tag vocabulary with " +
+                "counts; 'namespaces' for the namespace vocabulary with counts (prefix 'voice:' lists " +
+                "every voice:* scope). Use to summarize what exists or discover scopes, then memory_read " +
+                "a specific record or memory_recall to search.",
             inputSchema: {
                 kind: browseKind.describe("what view to return"),
-                namespace: z.string().optional().describe("filter to this namespace"),
-                prefix: z.string().optional().describe("filter keys/tags starting with this prefix"),
+                namespace: z.string().optional().describe(NS_FILTER_DESC),
+                prefix: z.string().optional().describe("for 'recent' filters keys; for 'tags'/'namespaces' filters the vocabulary"),
                 limit: z.number().int().positive().max(100).optional().describe("default 20"),
             },
         },
@@ -94,12 +108,13 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
             title: "Read a memory by exact key",
             annotations: { readOnlyHint: true },
             description:
-                "Fetch one record by exact (namespace, key) from the SHARED store — typically a key " +
-                "you got from memory_recall, memory_browse, or memory_backlinks. Returns a hint if " +
-                "no record exists at that location.",
+                "Fetch one record by exact (namespace, key) from the SHARED store, plus its immediate " +
+                "neighbourhood: outbound links ('children') and inbound links ('backlinks'), each with " +
+                "a snippet. Reading a hub-note surfaces everything it links in one call. Returns a hint " +
+                "if no record exists at that location.",
             inputSchema: {
-                namespace: z.string().min(1),
-                key: z.string().min(1),
+                namespace: z.string().min(1).describe(NS_DESC),
+                key: z.string().min(1).describe(KEY_DESC),
             },
         },
         async ({ namespace, key }) => {
@@ -124,8 +139,8 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
                 "to it (force=true overrides, but consider updating the target instead). Use when the " +
                 "user asks to forget something or a record is clearly wrong.",
             inputSchema: {
-                namespace: z.string().min(1),
-                key: z.string().min(1),
+                namespace: z.string().min(1).describe(NS_DESC),
+                key: z.string().min(1).describe(KEY_DESC),
                 force: z.boolean().optional().describe("override the backlink-protection check"),
             },
         },
@@ -149,10 +164,10 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
                 "[[wikilink]] in content, e.g. 'supersedes' or 'caused-by'. Most links auto-extract " +
                 "from wikilinks; use this only for the rest. Idempotent.",
             inputSchema: {
-                from_namespace: z.string().min(1),
-                from_key: z.string().min(1),
-                to_namespace: z.string().min(1),
-                to_key: z.string().min(1),
+                from_namespace: z.string().min(1).describe(NS_DESC),
+                from_key: z.string().min(1).describe(KEY_DESC),
+                to_namespace: z.string().min(1).describe(NS_DESC),
+                to_key: z.string().min(1).describe(KEY_DESC),
                 relation: z.string().optional().describe("defaults to 'related'"),
             },
         },
@@ -172,8 +187,8 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
                 "or [[wikilink]] — what discussed it, depends on it, or supersedes it. Often more " +
                 "useful than memory_recall for understanding a topic.",
             inputSchema: {
-                namespace: z.string().min(1),
-                key: z.string().min(1),
+                namespace: z.string().min(1).describe(NS_DESC),
+                key: z.string().min(1).describe(KEY_DESC),
             },
         },
         async ({ namespace, key }) => ok(store.backlinks(namespace, key)),

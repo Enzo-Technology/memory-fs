@@ -12,6 +12,22 @@ export function slugify(input: string): string {
   return lastDash > 20 ? cut.slice(0, lastDash) : cut;
 }
 
+// Normalize a caller-supplied key to a safe slug, so provided and auto-derived
+// keys are addressed identically (deriveKey already slugifies).
+export function normalizeKey(key: string): string {
+  return slugify(key);
+}
+
+// Normalize a namespace while preserving the ':' scope-separator convention
+// ('Project:Web Stuff' -> 'project:web-stuff'). Slugging each segment strips the
+// whitespace and '/' that would otherwise collide with [[ns/key]] addressing.
+export function normalizeNamespace(namespace: string): string {
+  return namespace
+    .split(":")
+    .map((segment) => slugify(segment))
+    .join(":");
+}
+
 export function deriveKey(content: string): string {
   const heading = content.match(/^#+\s+(.+)$/m);
   if (heading) return slugify(heading[1]!);
