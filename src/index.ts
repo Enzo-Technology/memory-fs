@@ -12,7 +12,7 @@ import {
 import { openDb } from "./core/db.js";
 import { MemoryStore } from "./core/store.js";
 import { buildMcpServer } from "./lib/mcp-server.js";
-import { serveAuthUi } from "./lib/auth-ui.js";
+import { serveWebApp } from "./lib/auth-ui.js";
 
 
 let db;
@@ -56,6 +56,15 @@ if (httpPort) {
     // Authorization Server (Better Auth): its /api/auth/* routes, plus the
     // RFC-8414 suffixed alias for AS metadata that MCP clients fetch.
     if (url.startsWith("/api/auth") || url.startsWith("/.well-known/oauth-authorization-server")) {
+      // MCP clients differ on AS-metadata discovery: some fetch the RFC-8414
+      // path-aware URL (/.well-known/oauth-authorization-server/api/auth), others
+      // the bare /.well-known/oauth-authorization-server. Better Auth only serves
+      // the former, so rewrite the bare path to its native metadata route — else
+      // the client never finds registration_endpoint, skips DCR, and hits
+      // /authorize with no client_id.
+      if (url === "/.well-known/oauth-authorization-server") {
+        req.url = "/api/auth/.well-known/oauth-authorization-server";
+      }
       return authHandler(req, res);
     }
 
@@ -64,28 +73,32 @@ if (httpPort) {
       return serveProtectedResourceMetadata(BASE_URL, res);
     }
 
-    // AS login/consent pages (public) — must precede the /mcp auth gate below.
-    if (serveAuthUi(url, res)) return;
+    // Resource Server: the one protected resource. Routed explicitly (before the SPA
+    // catch-all below) so the history fallback can never swallow it. Requires a bearer.
+    if (url === "/mcp" || url.startsWith("/mcp")) {
+      const principal = await authenticate(req);
+      if (!principal) {
+        res.writeHead(401, {
+          "WWW-Authenticate": `Bearer resource_metadata="${BASE_URL}/.well-known/oauth-protected-resource"`,
+        });
+        res.end();
+        return;
+      }
 
-    // Resource Server: everything else requires a valid bearer.
-    const principal = await authenticate(req);
-    if (!principal) {
-      res.writeHead(401, {
-        "WWW-Authenticate": `Bearer resource_metadata="${BASE_URL}/.well-known/oauth-protected-resource"`,
+      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+      const mcpServer = buildMcpServer(store, principal.sub);
+      res.on("close", () => { transport.close().catch(() => { }); });
+      mcpServer.connect(transport).then(() => {
+        return transport.handleRequest(req, res);
+      }).catch((e) => {
+        console.error("[memory-fs] transport error:", (e as Error).message);
+        if (!res.headersSent) res.writeHead(500).end();
       });
-      res.end();
       return;
     }
 
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-    const mcpServer = buildMcpServer(store, principal.sub);
-    res.on("close", () => { transport.close().catch(() => { }); });
-    mcpServer.connect(transport).then(() => {
-      return transport.handleRequest(req, res);
-    }).catch((e) => {
-      console.error("[memory-fs] transport error:", (e as Error).message);
-      if (!res.headersSent) res.writeHead(500).end();
-    });
+    // Everything else: the single-page web app (login, consent, memory browser).
+    serveWebApp(url, res);
   });
 
   httpServer.listen(parsedPort, "127.0.0.1", () => {
