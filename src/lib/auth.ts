@@ -2,7 +2,6 @@ import { betterAuth } from "better-auth";
 import { jwt } from "better-auth/plugins";
 import type { Database } from "better-sqlite3";
 import { oauthProvider } from "@better-auth/oauth-provider";
-import { assertOrgMember } from "./org-gate.js";
 
 
 // BASE_URL must be the PUBLIC url Claude reaches (the ngrok https url) so that the
@@ -26,14 +25,6 @@ export const makeAuth = (db: Database, baseUrl: string) => {
   const secret = process.env.BETTER_AUTH_SECRET;
   if (!secret) throw new Error("BETTER_AUTH_SECRET is required (32+ random chars)");
 
-  // The org gate is the sole perimeter (authorization is descoped). Refuse to
-  // run the hosted AS without an explicit policy. Use "*" to allow any Google
-  // account; set a domain (e.g. "useenso.co") to restrict to one Workspace.
-  const allowedHd = process.env.MEMORY_FS_ALLOWED_HD;
-  if (!allowedHd) {
-    throw new Error('MEMORY_FS_ALLOWED_HD is required (a Workspace domain, or "*" for any Google account)');
-  }
-
   return betterAuth({
     database: db,
     secret,
@@ -42,13 +33,6 @@ export const makeAuth = (db: Database, baseUrl: string) => {
       google: {
         clientId: process.env.GOOGLE_CLIENT_ID as string,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-        // Pre-filter Google's account chooser to the org (UX only; not a control).
-        ...(allowedHd !== "*" ? { hd: allowedHd } : {}),
-        // The actual control: verify the signed hd claim on every sign-in.
-        mapProfileToUser: (profile) => {
-          assertOrgMember(profile, allowedHd);
-          return {};
-        },
       },
     },
     // CORS/CSRF origin trust (NOT redirect-uri allowlisting — DCR clients self-declare those).

@@ -24,7 +24,6 @@ async function spawnHttpServer(port: number): Promise<{ kill: () => void }> {
       MEMORY_FS_DB: join(dir, "test.db"),
       MEMORY_FS_HTTP_PORT: String(port),
       BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
-      MEMORY_FS_ALLOWED_HD: "*",
     },
     stdio: ["ignore", "ignore", "ignore"],
   });
@@ -101,25 +100,6 @@ describe("server HTTP transport", () => {
     } finally {
       server.kill();
     }
-  });
-
-  it("refuses to boot in HTTP mode without MEMORY_FS_ALLOWED_HD", async () => {
-    const port = await getFreePort();
-    const dir = mkdtempSync(join(tmpdir(), "memfs-noallow-"));
-    const child = spawn("node", ["dist/index.js"], {
-      env: {
-        ...process.env,
-        MEMORY_FS_DB: join(dir, "test.db"),
-        MEMORY_FS_HTTP_PORT: String(port),
-        BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
-        MEMORY_FS_ALLOWED_HD: "", // explicitly unset
-      },
-      stdio: ["ignore", "ignore", "ignore"],
-    });
-    const code: number = await new Promise((resolve) =>
-      child.on("exit", (c) => resolve(c ?? 0)),
-    );
-    expect(code).not.toBe(0);
   });
 
   it("serves Protected Resource Metadata pointing at the trusted AS", async () => {

@@ -7,7 +7,7 @@ Wants=network-online.target
 ExecStart=/usr/bin/node /opt/memory-fs/dist/index.js
 WorkingDirectory=/opt/memory-fs
 # Holds MEMORY_FS_HTTP_PORT, MEMORY_FS_DOMAIN, MEMORY_FS_DB, BETTER_AUTH_SECRET,
-# GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, MEMORY_FS_ALLOWED_HD, BUCKET.
+# GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, BUCKET.
 # Provisioned on the host with mode 600 — never committed.
 EnvironmentFile=/etc/memory-fs/env
 User=memoryfs
