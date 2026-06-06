@@ -4,6 +4,9 @@
   "description": "Shared memory filesystem exposed over MCP",
   "license": "Apache-2.0",
   "type": "module",
+  "engines": {
+    "node": ">=20 <25"
+  },
   "bin": {
     "memory-fs": "dist/index.js"
   },
