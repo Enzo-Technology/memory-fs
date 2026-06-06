@@ -56,11 +56,11 @@ The server ships with the repo. Build and register it with your MCP client:
 
 ```sh
 npm install && npm run build
-node dist/server.js        # stdio transport
+node dist/index.js        # stdio transport
 ```
 
 - DB defaults to `~/.memory-fs/memory.db`; override with `MEMORY_FS_DB=/path/to/db`.
 - For a shared store, point every client's `MEMORY_FS_DB` at the same database, or run the
-  optional HTTP transport (`MEMORY_FS_HTTP_PORT` + `MEMORY_FS_TOKEN`) and connect clients to it.
-- Register `node /abs/path/dist/server.js` as an MCP server in your client (Claude Code,
+  optional HTTP transport (`MEMORY_FS_HTTP_PORT`, behind Google OAuth) and connect clients to it.
+- Register `node /abs/path/dist/index.js` as an MCP server in your client (Claude Code,
   Cursor, etc.).

@@ -19,7 +19,7 @@ given only the tool descriptions and a system prompt.
 **MCPJam Inspector** is an optional fallback for visual inspection of individual cells before running the full 750:
 
 1. `npx -y @mcpjam/inspector`
-2. Add this server as a local stdio MCP server: command `node`, args `["./dist/server.js"]`, env `MEMORY_FS_DB=/tmp/memfs-eval.db`.
+2. Add this server as a local stdio MCP server: command `node`, args `["./dist/index.js"]`, env `MEMORY_FS_DB=/tmp/memfs-eval.db`.
 3. Paste the contents of `eval/system-prompts/<variant>.md` into MCPJam's system-prompt field, then a prompt from `eval/prompts.json`, and send (model `claude-haiku-4-5`, temp 1.0).
 4. Use MCPJam to sanity-check 10–20 cells; use the scripted harness for the full eval.
 

@@ -6,7 +6,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 
-const SERVER_PATH = resolve(import.meta.dirname, "../dist/server.js");
+const SERVER_PATH = resolve(import.meta.dirname, "../dist/index.js");
 const VARIANTS = ["A-minimal", "B-usage-hints", "C-meta-instruction"];
 const REGIMES = ["clean", "mixed"];
 const RUNS_PER_PROMPT = 5;

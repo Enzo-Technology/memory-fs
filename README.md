@@ -15,7 +15,7 @@ See [`docs/plans/2026-05-18-phase-1-wiki-layer-and-eval.md`](docs/plans/2026-05-
 ```sh
 npm install
 npm run build
-node dist/server.js   # stdio MCP server, hit it with any MCP client
+node dist/index.js   # stdio MCP server, hit it with any MCP client
 ```
 
 DB lives at `~/.memory-fs/memory.db` by default; override with `MEMORY_FS_DB=/path/to/db`.

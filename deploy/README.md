@@ -10,8 +10,12 @@ Create `/etc/memory-fs/env` on the host. It must be owned by root, mode 600. **N
 
 ```
 MEMORY_FS_HTTP_PORT=3456
-MEMORY_FS_TOKEN=<random-bearer-token>
+MEMORY_FS_DOMAIN=memory.useenso.co
 MEMORY_FS_DB=/var/lib/memory-fs/memory.db
+BETTER_AUTH_SECRET=<32+ random chars — openssl rand -base64 32>
+GOOGLE_CLIENT_ID=<from Google Cloud Console>
+GOOGLE_CLIENT_SECRET=<from Google Cloud Console>
+MEMORY_FS_ALLOWED_HD=useenso.co
 BUCKET=<gcs-bucket-name>
 ```
 
