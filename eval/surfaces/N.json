@@ -1,0 +1,30 @@
+[
+  {
+    "name": "store_backlinks",
+    "description": "Find records that reference this one."
+  },
+  {
+    "name": "store_browse",
+    "description": "List records in the store."
+  },
+  {
+    "name": "store_delete",
+    "description": "Delete a record."
+  },
+  {
+    "name": "store_link",
+    "description": "Relate two records."
+  },
+  {
+    "name": "store_read",
+    "description": "Read a record from the store by its exact location."
+  },
+  {
+    "name": "store_search",
+    "description": "Search records by keyword."
+  },
+  {
+    "name": "store_write",
+    "description": "Write a record to the store."
+  }
+]

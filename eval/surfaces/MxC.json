@@ -1,0 +1,30 @@
+[
+  {
+    "name": "memory_backlinks",
+    "description": "Find which shared-context records depend on this one."
+  },
+  {
+    "name": "memory_browse",
+    "description": "Survey the shared team context so you know what the team already relies on."
+  },
+  {
+    "name": "memory_delete",
+    "description": "Remove a shared-context record that no longer reflects the team's direction."
+  },
+  {
+    "name": "memory_link",
+    "description": "Relate two shared-context records so the team can navigate between them."
+  },
+  {
+    "name": "memory_read",
+    "description": "Read a shared-context record by its exact location before you act on it."
+  },
+  {
+    "name": "memory_search",
+    "description": "Search the shared team context by keyword; read it before acting."
+  },
+  {
+    "name": "memory_write",
+    "description": "Write a record to the shared team context: key decisions, conventions, and direction the team relies on. Update it when direction changes."
+  }
+]

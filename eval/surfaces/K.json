@@ -1,0 +1,30 @@
+[
+  {
+    "name": "knowledge_backlinks",
+    "description": "Find which knowledge-base entries reference this one."
+  },
+  {
+    "name": "knowledge_browse",
+    "description": "Survey the team knowledge base of settled facts and conventions."
+  },
+  {
+    "name": "knowledge_delete",
+    "description": "Remove a knowledge-base entry that is no longer established or correct."
+  },
+  {
+    "name": "knowledge_link",
+    "description": "Relate two knowledge-base entries so readers can navigate between them."
+  },
+  {
+    "name": "knowledge_read",
+    "description": "Read a knowledge-base entry by its exact location."
+  },
+  {
+    "name": "knowledge_search",
+    "description": "Search the team knowledge base of settled facts and conventions by keyword."
+  },
+  {
+    "name": "knowledge_write",
+    "description": "Add an entry to the team knowledge base: settled facts, conventions, and reference material that are established and intended to be durable."
+  }
+]
