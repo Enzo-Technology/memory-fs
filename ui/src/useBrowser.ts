@@ -91,6 +91,7 @@ export function useBrowser(): BrowserView {
   const [mode, setMode] = useState<Mode>("split");
   const [totals, setTotals] = useState({ memories: 0, namespaces: 0 });
   const inflight = useRef<Set<string>>(new Set());
+  const loaded = useRef<Set<string>>(new Set());
 
   const tree = useMemo(
     () => (namespaceItems ? buildTree(namespaceItems) : null),
@@ -174,18 +175,18 @@ export function useBrowser(): BrowserView {
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
-  // Lazy-fetch one folder's own memories the first time it opens. Guards against duplicate
-  // fetches (already resolved OR in flight). Derive-don't-round-trip: only leaf contents hit
-  // the network; the folder structure is all client-side.
+  // Lazy-fetch one folder's own memories the first time it opens. Dedups against both in-flight
+  // and already-resolved folders via refs, so the fetch/guard stay out of the (pure) setLeaves
+  // updater. Derive-don't-round-trip: only leaf contents hit the network.
   const ensureLeaf = useCallback((ns: string) => {
-    setLeaves((cur) => {
-      if (ns in cur || inflight.current.has(ns)) return cur;
-      inflight.current.add(ns);
-      listMemories("recent", ns)
-        .then((b) => setLeaves((c) => ({ ...c, [ns]: toRows(b) })))
-        .finally(() => inflight.current.delete(ns));
-      return cur;
-    });
+    if (inflight.current.has(ns) || loaded.current.has(ns)) return;
+    inflight.current.add(ns);
+    listMemories("recent", ns)
+      .then((b) => {
+        loaded.current.add(ns);
+        setLeaves((c) => ({ ...c, [ns]: toRows(b) }));
+      })
+      .finally(() => inflight.current.delete(ns));
   }, []);
 
   const toggleFolder = useCallback(
