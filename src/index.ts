@@ -4,7 +4,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { createServer as createHttpServer } from "node:http";
 import { toNodeHandler } from "better-auth/node";
 import { getMigrations } from "better-auth/db/migration";
-import { makeAuth } from "./lib/auth.js";
+import { makeAuth, trustedOrigins } from "./lib/auth.js";
 import {
   makeAuthenticate,
   serveProtectedResourceMetadata,
@@ -51,12 +51,22 @@ if (httpPort) {
 
   const authHandler = toNodeHandler(auth);
   const authenticate = makeAuthenticate(BASE_URL);
+  const allowedOrigins = new Set(trustedOrigins(BASE_URL));
 
   // The cookie-path read API for the browser. Same store, session auth instead of bearer.
   const browseApi = makeBrowseApi(store, makeRequireSession(auth));
 
   const httpServer = createHttpServer(async (req, res) => {
     const url = req.url ?? "/";
+
+    // Readiness probe: unauthenticated, no DB work (the process already crashed at
+    // boot if the DB wouldn't open). A 200 means "listening" — used by the deploy
+    // cutover to health-check a new release before routing traffic to it.
+    if (url === "/health") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok" }));
+      return;
+    }
 
     // Authorization Server (Better Auth): its /api/auth/* routes, plus the
     // RFC-8414 suffixed alias for AS metadata that MCP clients fetch.
@@ -81,6 +91,15 @@ if (httpPort) {
     // Resource Server: the one protected resource. Routed explicitly (before the SPA
     // catch-all below) so the history fallback can never swallow it. Requires a bearer.
     if (url === "/mcp" || url.startsWith("/mcp")) {
+      // DNS-rebinding defense (spec 2025-11-25): reject a present-but-untrusted
+      // Origin before doing any auth work. A missing Origin (server-to-server MCP
+      // clients) is allowed through — only a *present, untrusted* one is a 403.
+      const origin = req.headers.origin;
+      if (typeof origin === "string" && !allowedOrigins.has(origin)) {
+        res.writeHead(403).end();
+        return;
+      }
+
       const principal = await authenticate(req);
       if (!principal) {
         res.writeHead(401, {
@@ -116,6 +135,20 @@ if (httpPort) {
   httpServer.listen(parsedPort, "127.0.0.1", () => {
     console.error(`[memory-fs] listening on 127.0.0.1:${httpPort}`);
   });
+
+  // Graceful drain: stop accepting, let in-flight requests finish, then close the
+  // DB and exit. Lets the deploy cutover SIGTERM the old release without dropping
+  // live requests. The unref'd timer is a backstop if a connection won't close.
+  const shutdown = (signal: string) => {
+    console.error(`[memory-fs] ${signal} — draining`);
+    httpServer.close(() => {
+      db.close();
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(0), 10_000).unref();
+  };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 } else {
   const transport = new StdioServerTransport();
   const server = buildMcpServer(store);
