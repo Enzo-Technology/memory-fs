@@ -89,7 +89,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
     exit 1
 fi
 
-PORT="$(grep -E '^MEMORY_FS_HTTP_PORT=' "$ENV_FILE" | cut -d= -f2 | tr -d '[:space:]')"
+PORT="$(grep -E '^MEMORY_FS_HTTP_PORT=' "$ENV_FILE" | cut -d= -f2 | tr -d '[:space:]' || true)"
 if [[ -z "$PORT" ]]; then
     echo "ERROR: MEMORY_FS_HTTP_PORT not found in $ENV_FILE" >&2
     exit 1
