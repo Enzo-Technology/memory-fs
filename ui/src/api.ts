@@ -1,12 +1,13 @@
 // The data layer: the only place that knows endpoint URLs and that the cookie must travel
 // (credentials: "include"). Response shapes are imported (type-only) from the server's store
 // types — never re-declared here — so the only client↔server coupling is the URL strings.
-import type { BrowseResult, ReadResult } from "../../src/core/store";
+import type { BrowseResult, NamespaceItem, ReadResult } from "../../src/core/store";
 import type { Memory } from "../../src/core/db";
 
-// The browse lenses the UI exposes (subset of the store's BrowseKind: no "index"/"tags" — see
-// the spec's deferred-tags note).
-export type Facet = "recent" | "namespaces" | "hubs" | "orphans";
+// The flat lenses that resolve to openable memory rows (used both as a top-level lens and, with a
+// namespace, to fetch one folder's leaves). "namespaces" is the tree and is fetched separately.
+export type FlatLens = "recent" | "hubs" | "orphans";
+export type Lens = "namespaces" | FlatLens;
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(path, { credentials: "include" });
@@ -19,8 +20,20 @@ async function get<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-export function listMemories(facet: Facet, namespace?: string): Promise<BrowseResult> {
-  const p = new URLSearchParams({ kind: facet });
+// The namespace vocabulary, fetched once and folded into the tree client-side. Returns the
+// store-wide memory `total` alongside, so the running total needs no extra call. Limit is raised
+// past the store default (20) so the tree shows every namespace.
+export async function listNamespaces(): Promise<{
+  items: NamespaceItem[];
+  total: number;
+}> {
+  const b = await get<BrowseResult>(`/api/memories?kind=namespaces&limit=1000`);
+  if (b.kind !== "namespaces") throw new Error("expected namespaces result");
+  return { items: b.items, total: b.total };
+}
+
+export function listMemories(kind: FlatLens, namespace?: string): Promise<BrowseResult> {
+  const p = new URLSearchParams({ kind, limit: "100" });
   if (namespace) p.set("namespace", namespace);
   return get<BrowseResult>(`/api/memories?${p.toString()}`);
 }
