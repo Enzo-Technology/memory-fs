@@ -39,7 +39,9 @@ export function listMemories(kind: FlatLens, namespace?: string): Promise<Browse
 }
 
 export function recall(query: string): Promise<Memory[]> {
-  return get<Memory[]>(`/api/memories/recall?q=${encodeURIComponent(query)}`);
+  // The server defaults recall to 5 hits; the search pane is a left-rail list, so lift the cap to
+  // match the lens lists (a 5-result ceiling reads as "search is broken").
+  return get<Memory[]>(`/api/memories/recall?q=${encodeURIComponent(query)}&limit=50`);
 }
 
 export function readMemory(namespace: string, key: string): Promise<ReadResult> {
