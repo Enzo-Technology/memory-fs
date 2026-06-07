@@ -2,7 +2,7 @@
   "name": "memory-fs",
   "version": "0.1.0",
   "description": "Shared memory filesystem exposed over MCP",
-  "license": "Apache-2.0",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "engines": {
     "node": ">=20 <25"

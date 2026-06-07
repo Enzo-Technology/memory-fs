@@ -74,4 +74,8 @@ See [`CLAUDE.md`](CLAUDE.md) — bias to no, crash on impossible states, surface
 
 ## License
 
-[Apache-2.0](LICENSE). © 2026 Ben Graney Green / Enzo Technology.
+[AGPL-3.0](LICENSE). © 2026 Enzo Technology, Inc.
+
+memory-fs is free to self-host. The AGPL's network-use clause means anyone who
+offers it as a service must publish their modifications. A separate commercial
+license is available for the hosted offering.
