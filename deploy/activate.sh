@@ -62,9 +62,12 @@ fi
 # ---------------------------------------------------------------------------
 
 RELEASE_DIR="${BASE}/releases/${SHA}"
-mkdir -p "$RELEASE_DIR"
-# Idempotent: replace contents if re-running with the same SHA.
-tar -xzf "$TARBALL" -C "$RELEASE_DIR" --strip-components=0
+TMP_DIR="${BASE}/releases/${SHA}.tmp"
+rm -rf "$TMP_DIR"
+mkdir -p "$TMP_DIR"
+tar -xzf "$TARBALL" -C "$TMP_DIR" --strip-components=0
+rm -rf "$RELEASE_DIR"
+mv "$TMP_DIR" "$RELEASE_DIR"
 
 # ---------------------------------------------------------------------------
 # 4. Atomic symlink flip
@@ -90,8 +93,8 @@ if [[ ! -f "$ENV_FILE" ]]; then
 fi
 
 PORT="$(grep -E '^MEMORY_FS_HTTP_PORT=' "$ENV_FILE" | cut -d= -f2 | tr -d '[:space:]' || true)"
-if [[ -z "$PORT" ]]; then
-    echo "ERROR: MEMORY_FS_HTTP_PORT not found in $ENV_FILE" >&2
+if [[ ! "$PORT" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: MEMORY_FS_HTTP_PORT in $ENV_FILE is missing or not numeric: '${PORT}'" >&2
     exit 1
 fi
 
@@ -116,8 +119,11 @@ if [[ "$healthy" != "true" ]]; then
     if [[ -n "$PREVIOUS_RELEASE" ]]; then
         echo "Rolling back to previous release: $PREVIOUS_RELEASE" >&2
         ln -sfn "$PREVIOUS_RELEASE" "${BASE}/current"
-        systemctl restart "$SERVICE"
-        echo "Rollback complete. Deploy FAILED." >&2
+        if systemctl restart "$SERVICE"; then
+            echo "Rollback complete. Deploy FAILED." >&2
+        else
+            echo "ERROR: rollback restart also failed — service may be down. Deploy FAILED." >&2
+        fi
     else
         echo "No previous release to roll back to. Broken release left in place. Deploy FAILED." >&2
     fi
