@@ -1,9 +1,9 @@
 {
   "items": [
     {
-      "id": "errfmt",
+      "id": "apperror",
       "kind": "durable",
-      "gist": "all CLI errors use EnzoError with a code",
+      "gist": "all CLI errors use AppError with a code",
       "shouldFile": true
     },
     {

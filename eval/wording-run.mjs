@@ -10,7 +10,7 @@ import { buildSeedDb } from "./fixtures/seed-db.mjs";
 import { SCRIPTS } from "./scripts.mjs";
 
 const NEUTRAL_SP =
-  "You are an engineering assistant working with the enzo team. You have access to tools. Help the user with their requests.";
+  "You are an engineering assistant working with the Acme team. You have access to tools. Help the user with their requests.";
 const WRAPPER = resolve(import.meta.dirname, "server/index.mjs");
 const REAL_SERVER = resolve(import.meta.dirname, "../dist/index.js");
 const ARTIFACTS = resolve(import.meta.dirname, "artifacts");
@@ -42,8 +42,20 @@ async function connectServer(condition, dbPath) {
   return { client, tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.inputSchema })) };
 }
 
-async function runScript({ anthropic, condition, model, scriptId }) {
+// Resolve the base history for a script at a given iteration.
+// Corpus scripts (P2): pick corpus[iter % corpus.length] — paired design: same chat for M and C at iter i.
+// Non-corpus scripts: use script.history ?? [].
+function resolveHistory(script, iter) {
+  if (script.corpus) {
+    const idx = iter % script.corpus.length;
+    return { baseHistory: script.corpus[idx], historySource: `corpus[${idx}]` };
+  }
+  return { baseHistory: script.history ?? [], historySource: "history" };
+}
+
+async function runScript({ anthropic, condition, model, scriptId, iter }) {
   const script = SCRIPTS[scriptId];
+  const { baseHistory, historySource } = resolveHistory(script, iter);
   const transcripts = [];
   // Probes flagged `fresh` get their own conversation + own seeded DB; the rest
   // share one conversation atop the fabricated history (spec §4).
@@ -54,14 +66,14 @@ async function runScript({ anthropic, condition, model, scriptId }) {
       buildSeedDb(dbPath);
       const { client, tools } = await connectServer(condition, dbPath);
       const { tools: shuffled, order } = shuffleLogged(tools);
-      shared = { client, tools: shuffled, order, dbPath, messages: script.history.slice() };
+      shared = { client, tools: shuffled, order, dbPath, messages: baseHistory.slice() };
     }
     shared.messages.push({ role: "user", content: turn.text });
     const r = await runAgentLoop({ anthropic, mcp: shared.client, model: MODELS[model],
       system: NEUTRAL_SP, tools: shared.tools, messages: shared.messages, maxSteps: 10 });
     // Empty assistant content would cause the next turn's Anthropic API call to reject.
     shared.messages.push({ role: "assistant", content: r.finalText?.trim() ? r.finalText : "(no further comment)" });
-    transcripts.push({ turn: turn.id, toolOrder: shared.order, ...r });
+    transcripts.push({ turn: turn.id, toolOrder: shared.order, historySource, ...r });
     if (turn.fresh) { await shared.client.close(); shared = null; }
   }
   if (shared) await shared.client.close();
@@ -75,7 +87,7 @@ async function main() {
       for (const scriptId of MATRIX.scripts)
         for (let iter = 0; iter < MATRIX.n; iter++) {
           let transcripts;
-          try { transcripts = await runScript({ anthropic, condition, model, scriptId }); }
+          try { transcripts = await runScript({ anthropic, condition, model, scriptId, iter }); }
           catch (e) { console.error(`\n[excluded] ${condition}/${model}/${scriptId}#${iter}: ${e.message}`); continue; }
           const dir = resolve(ARTIFACTS, condition, model, scriptId);
           mkdirSync(dir, { recursive: true });

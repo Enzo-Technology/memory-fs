@@ -1,11 +1,11 @@
 [
   {
     "role": "user",
-    "content": "Let's have a proper working session on the enzo CLI architecture today. I want to nail a few things that have been floating. First, where are we on the overall structure — what crates do we have and what's each responsible for?"
+    "content": "Let's have a proper working session on the Acme CLI architecture today. I want to nail a few things that have been floating. First, where are we on the overall structure — what crates do we have and what's each responsible for?"
   },
   {
     "role": "assistant",
-    "content": "Here's what we have so far. Three crates in the workspace: `enzo-core` holds the domain types — Account, Signal, Action, the scoring logic, and anything that isn't IO. `enzo-crm` is the CRM adapter layer, currently implementing Salesforce and a stub for HubSpot; it owns all the HTTP calls and token refresh. `enzo-cli` is the thin binary: argument parsing with `clap`, output formatting, and the `init`/`status`/`push`/`configure` subcommands. The split is working well — `enzo-core` has no async at all, which keeps it fast to test."
+    "content": "Here's what we have so far. Three crates in the workspace: `acme-core` holds the domain types — Account, Signal, Action, the scoring logic, and anything that isn't IO. `acme-crm` is the CRM adapter layer, currently implementing Salesforce and a stub for HubSpot; it owns all the HTTP calls and token refresh. `acme-cli` is the thin binary: argument parsing with `clap`, output formatting, and the `init`/`status`/`push`/`configure` subcommands. The split is working well — `acme-core` has no async at all, which keeps it fast to test."
   },
   {
     "role": "user",
@@ -13,15 +13,15 @@
   },
   {
     "role": "assistant",
-    "content": "Agreed. The problem is that `anyhow` is fine for internal error propagation but terrible as a user-facing format. What we need is a dedicated `EnzoError` type at the CLI boundary — it carries a short human-readable message, a numeric error code (so the support team can triage without stack traces), and an optional docs link. Every subcommand's `run()` function should return `Result<(), EnzoError>` and the top-level handler formats it consistently. The numeric codes also let us write grep-able support runbooks."
+    "content": "Agreed. The problem is that `anyhow` is fine for internal error propagation but terrible as a user-facing format. What we need is a dedicated `AppError` type at the CLI boundary — it carries a short human-readable message, a numeric error code (so the support team can triage without stack traces), and an optional docs link. Every subcommand's `run()` function should return `Result<(), AppError>` and the top-level handler formats it consistently. The numeric codes also let us write grep-able support runbooks."
   },
   {
     "role": "user",
-    "content": "That's exactly right. So the decision is: all user-facing errors go through `EnzoError` with a code. Every crate. No raw `anyhow` at the CLI boundary. Let's call that settled — `EnzoError` with an error code is the convention from here on."
+    "content": "That's exactly right. So the decision is: all user-facing errors go through `AppError` with a code. Every crate. No raw `anyhow` at the CLI boundary. Let's call that settled — `AppError` with an error code is the convention from here on."
   },
   {
     "role": "assistant",
-    "content": "Settled. `EnzoError` with a numeric code, human-readable message, and optional docs URL — that's the error convention for every user-facing failure path in the CLI. I'll flag that as a firm architectural decision. The `enzo-core` crate can keep `anyhow` internally since that's implementation detail, but anything surfaced to a user goes through `EnzoError`. We should add a lint or a clippy rule to catch raw `.unwrap()` or bare `anyhow` propagation in `enzo-cli`."
+    "content": "Settled. `AppError` with a numeric code, human-readable message, and optional docs URL — that's the error convention for every user-facing failure path in the CLI. I'll flag that as a firm architectural decision. The `acme-core` crate can keep `anyhow` internally since that's implementation detail, but anything surfaced to a user goes through `AppError`. We should add a lint or a clippy rule to catch raw `.unwrap()` or bare `anyhow` propagation in `acme-cli`."
   },
   {
     "role": "user",
@@ -37,7 +37,7 @@
   },
   {
     "role": "assistant",
-    "content": "Good call. JSON it is — we were briefly tempted by TOML but reversed course in this session. Fewer dependencies, straightforward serialization, and our config shape doesn't justify the added format complexity. We'll use `serde_json` with a strong Zod-style schema validation on load. If the file's malformed or the fields are wrong, we bail with a clean `EnzoError` rather than trying to auto-repair."
+    "content": "Good call. JSON it is — we were briefly tempted by TOML but reversed course in this session. Fewer dependencies, straightforward serialization, and our config shape doesn't justify the added format complexity. We'll use `serde_json` with a strong Zod-style schema validation on load. If the file's malformed or the fields are wrong, we bail with a clean `AppError` rather than trying to auto-repair."
   },
   {
     "role": "user",
@@ -61,7 +61,7 @@
   },
   {
     "role": "assistant",
-    "content": "JSON lines to a local file (`~/.enzo/shadow.jsonl`), one object per scoring event. Each object carries: timestamp, account ID, current score, candidate score, the raw signal values, and a session ID (so we can join rep actions to scoring events). The rep never sees this file in normal operation — it's only written when `ENZO_SHADOW=1` is set. That keeps the path clearly off by default, which matters for the telemetry conversation we need to have."
+    "content": "JSON lines to a local file (`~/.acme/shadow.jsonl`), one object per scoring event. Each object carries: timestamp, account ID, current score, candidate score, the raw signal values, and a session ID (so we can join rep actions to scoring events). The rep never sees this file in normal operation — it's only written when `APP_SHADOW=1` is set. That keeps the path clearly off by default, which matters for the telemetry conversation we need to have."
   },
   {
     "role": "user",
@@ -69,7 +69,7 @@
   },
   {
     "role": "assistant",
-    "content": "We decided: opt-out. Telemetry is on by default — it collects aggregate usage events (subcommand invocations, error codes, timing) with no PII — and it's documented clearly in the README. The rationale: the data genuinely helps us improve the CLI for the team, and the team is small enough that we can have a direct conversation if someone objects. We set a `ENZO_TELEMETRY=0` env var as the escape hatch, and we mention it prominently in `enzo init` output. This is a settled decision: telemetry is opt-out, documented in the README, with a clean env var to disable it."
+    "content": "We decided: opt-out. Telemetry is on by default — it collects aggregate usage events (subcommand invocations, error codes, timing) with no PII — and it's documented clearly in the README. The rationale: the data genuinely helps us improve the CLI for the team, and the team is small enough that we can have a direct conversation if someone objects. We set a `APP_TELEMETRY=0` env var as the escape hatch, and we mention it prominently in `acme init` output. This is a settled decision: telemetry is opt-out, documented in the README, with a clean env var to disable it."
   },
   {
     "role": "user",
@@ -85,19 +85,19 @@
   },
   {
     "role": "assistant",
-    "content": "The main gap is update delivery. Right now a rep on v0.3.1 has no way to know v0.4.0 exists unless we ping them in Slack. We need an update check — probably a lightweight version poll at startup against a static JSON file we host, with a configurable frequency (default: once per day, cached). The check should be non-blocking and silent if it fails. If there's a newer version, print one line below the output: enzo v0.4.0 is available — run 'enzo upgrade' to update. Nothing more aggressive than that."
+    "content": "The main gap is update delivery. Right now a rep on v0.3.1 has no way to know v0.4.0 exists unless we ping them in Slack. We need an update check — probably a lightweight version poll at startup against a static JSON file we host, with a configurable frequency (default: once per day, cached). The check should be non-blocking and silent if it fails. If there's a newer version, print one line below the output: acme v0.4.0 is available — run 'acme upgrade' to update. Nothing more aggressive than that."
   },
   {
     "role": "user",
-    "content": "That's fine. Make sure the update check respects the telemetry opt-out — if someone's set `ENZO_TELEMETRY=0` we shouldn't be phoning home for anything."
+    "content": "That's fine. Make sure the update check respects the telemetry opt-out — if someone's set `APP_TELEMETRY=0` we shouldn't be phoning home for anything."
   },
   {
     "role": "assistant",
-    "content": "Correct — the update check should be gated on telemetry preference. If `ENZO_TELEMETRY=0` is set, we skip the version poll entirely. The update check and the telemetry pipeline both count as 'phoning home', so they share the same opt-out. We document this in the README alongside the telemetry opt-out explanation. If someone wants update checks without telemetry we can revisit, but for now one toggle covers both."
+    "content": "Correct — the update check should be gated on telemetry preference. If `APP_TELEMETRY=0` is set, we skip the version poll entirely. The update check and the telemetry pipeline both count as 'phoning home', so they share the same opt-out. We document this in the README alongside the telemetry opt-out explanation. If someone wants update checks without telemetry we can revisit, but for now one toggle covers both."
   },
   {
     "role": "user",
-    "content": "Sounds right. One more architecture question — output serialization. Some power users want JSON output from commands like `enzo status` so they can pipe it into other tools. How do we support that?"
+    "content": "Sounds right. One more architecture question — output serialization. Some power users want JSON output from commands like `acme status` so they can pipe it into other tools. How do we support that?"
   },
   {
     "role": "assistant",
@@ -125,11 +125,11 @@
   },
   {
     "role": "assistant",
-    "content": "Fall back to free text input with a clear message: 'Unable to fetch territories from your CRM — please type your territory name.' We don't abort init, we just degrade gracefully. If they type something that doesn't match a real territory, the account fetch later in init will return zero results and we'll show a clear 'no accounts found for territory X — double-check with your admin' message. That's a recoverable state; they can re-run init. We raise an `EnzoError` with a distinct code for 'territory not found post-fetch' so support can identify it."
+    "content": "Fall back to free text input with a clear message: 'Unable to fetch territories from your CRM — please type your territory name.' We don't abort init, we just degrade gracefully. If they type something that doesn't match a real territory, the account fetch later in init will return zero results and we'll show a clear 'no accounts found for territory X — double-check with your admin' message. That's a recoverable state; they can re-run init. We raise an `AppError` with a distinct code for 'territory not found post-fetch' so support can identify it."
   },
   {
     "role": "user",
-    "content": "Good. Now the auth question — and I want to be careful here because this is a real decision. For the hosted version of enzo (not just the CLI), what provider do we use for user auth? We've been kicking around a few options."
+    "content": "Good. Now the auth question — and I want to be careful here because this is a real decision. For the hosted version of the app (not just the CLI), what provider do we use for user auth? We've been kicking around a few options."
   },
   {
     "role": "assistant",
@@ -149,7 +149,7 @@
   },
   {
     "role": "assistant",
-    "content": "The on-demand pull is workable for a small book of business (under 200 accounts) but it doesn't scale — each `enzo status` invocation does a fan-out CRM query that gets slower as the account list grows. The target architecture is a local cache: a SQLite file that's refreshed by a background sync process (`enzo daemon` or a launchd/systemd service), and the CLI queries the cache. The sync runs on a configurable interval (default 15 minutes), does incremental fetches using the CRM's `modified_since` filter, and writes only changed records. The CLI never waits for the CRM directly."
+    "content": "The on-demand pull is workable for a small book of business (under 200 accounts) but it doesn't scale — each `acme status` invocation does a fan-out CRM query that gets slower as the account list grows. The target architecture is a local cache: a SQLite file that's refreshed by a background sync process (`acme daemon` or a launchd/systemd service), and the CLI queries the cache. The sync runs on a configurable interval (default 15 minutes), does incremental fetches using the CRM's `modified_since` filter, and writes only changed records. The CLI never waits for the CRM directly."
   },
   {
     "role": "user",
@@ -157,7 +157,7 @@
   },
   {
     "role": "assistant",
-    "content": "We can do it without a flag day. Ship the cache infrastructure with v0.5 but have the CLI fall back to on-demand if the cache is empty or stale (older than 2× the sync interval). The daemon ships as opt-in (`enzo daemon --install` to register the service) so we don't surprise existing users. Once the daemon is running, the CLI detects the cache and uses it automatically. After a few versions when we're confident in the cache's correctness, we can flip the default to require the daemon. No hard cutover."
+    "content": "We can do it without a flag day. Ship the cache infrastructure with v0.5 but have the CLI fall back to on-demand if the cache is empty or stale (older than 2× the sync interval). The daemon ships as opt-in (`acme daemon --install` to register the service) so we don't surprise existing users. Once the daemon is running, the CLI detects the cache and uses it automatically. After a few versions when we're confident in the cache's correctness, we can flip the default to require the daemon. No hard cutover."
   },
   {
     "role": "user",
@@ -165,7 +165,7 @@
   },
   {
     "role": "assistant",
-    "content": "Good point. Two mechanisms: a webhook from the CRM (Salesforce supports outbound messages, HubSpot has workflow webhooks) that triggers an immediate re-fetch for that specific account, and a manual `enzo refresh <account-id>` command for when the rep knows something just happened. The webhook path requires a publicly accessible endpoint — which means it only works for the hosted version, not the local CLI. For the local CLI, `enzo refresh` is the escape hatch. We document both and let people pick based on their setup."
+    "content": "Good point. Two mechanisms: a webhook from the CRM (Salesforce supports outbound messages, HubSpot has workflow webhooks) that triggers an immediate re-fetch for that specific account, and a manual `acme refresh <account-id>` command for when the rep knows something just happened. The webhook path requires a publicly accessible endpoint — which means it only works for the hosted version, not the local CLI. For the local CLI, `acme refresh` is the escape hatch. We document both and let people pick based on their setup."
   },
   {
     "role": "user",
@@ -173,7 +173,7 @@
   },
   {
     "role": "assistant",
-    "content": "If we're honest about what fits in one sprint: the local cache infrastructure with the SQLite schema and incremental sync logic, the daemon with launchd and systemd service files, the `enzo refresh` command, and the fallback path in the CLI. The webhook integration is v0.6 — it needs the hosted endpoint work and the CRM webhook configuration, which is a bigger surface. The `--json` flag and update check are also v0.5 since they're small and complete the output-format work. `EnzoError` migration (replacing all the raw anyhow leaks) needs to ship with v0.5 since the cache errors need proper codes."
+    "content": "If we're honest about what fits in one sprint: the local cache infrastructure with the SQLite schema and incremental sync logic, the daemon with launchd and systemd service files, the `acme refresh` command, and the fallback path in the CLI. The webhook integration is v0.6 — it needs the hosted endpoint work and the CRM webhook configuration, which is a bigger surface. The `--json` flag and update check are also v0.5 since they're small and complete the output-format work. `AppError` migration (replacing all the raw anyhow leaks) needs to ship with v0.5 since the cache errors need proper codes."
   },
   {
     "role": "user",
@@ -197,7 +197,7 @@
   },
   {
     "role": "assistant",
-    "content": "Done — here's the draft for the README telemetry section:\n\n---\n\n## Telemetry\n\nEnzo collects aggregate usage telemetry by default — subcommand invocations, error codes, and timing. No account data, rep names, or CRM content is ever collected.\n\n**To opt out:** set `ENZO_TELEMETRY=0` in your environment. This also disables the automatic update check.\n\n```bash\nexport ENZO_TELEMETRY=0   # add to your .zshrc or .bashrc to make it permanent\n```\n\nA `configure` flag (`enzo configure --telemetry off`) is on the roadmap but not yet shipped. The env var is the supported method today.\n\n---\n\nThat's accurate to what we decided: opt-out, clearly documented, env var is the current mechanism. I'll open a PR with just this change so it's in before v0.5."
+    "content": "Done — here's the draft for the README telemetry section:\n\n---\n\n## Telemetry\n\nAcme CLI collects aggregate usage telemetry by default — subcommand invocations, error codes, and timing. No account data, rep names, or CRM content is ever collected.\n\n**To opt out:** set `APP_TELEMETRY=0` in your environment. This also disables the automatic update check.\n\n```bash\nexport APP_TELEMETRY=0   # add to your .zshrc or .bashrc to make it permanent\n```\n\nA `configure` flag (`acme configure --telemetry off`) is on the roadmap but not yet shipped. The env var is the supported method today.\n\n---\n\nThat's accurate to what we decided: opt-out, clearly documented, env var is the current mechanism. I'll open a PR with just this change so it's in before v0.5."
   },
   {
     "role": "user",
@@ -221,7 +221,7 @@
   },
   {
     "role": "assistant",
-    "content": "The main risk is the daemon install story for v0.5. We're planning to ship `enzo daemon --install` as opt-in, which is the right call, but we haven't tested the launchd plist path on a clean macOS machine that's never had enzo on it. If that breaks, it's a bad first impression for the cache feature. I'd flag that as something to smoke-test early — spin up a fresh VM or get someone who hasn't run enzo before to try the install. That's lower risk than the auth question; I just don't want it to be the thing that bites us at release."
+    "content": "The main risk is the daemon install story for v0.5. We're planning to ship `acme daemon --install` as opt-in, which is the right call, but we haven't tested the launchd plist path on a clean macOS machine that's never had the CLI on it. If that breaks, it's a bad first impression for the cache feature. I'd flag that as something to smoke-test early — spin up a fresh VM or get someone who hasn't run the CLI before to try the install. That's lower risk than the auth question; I just don't want it to be the thing that bites us at release."
   },
   {
     "role": "user",

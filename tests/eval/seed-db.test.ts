@@ -12,8 +12,8 @@ describe("seed-db", () => {
     const path = join(mkdtempSync(join(tmpdir(), "memfs-seed-")), "seed.db");
     buildSeedDb(path);
     const store = new MemoryStore(openDb(path));
-    expect(store.read("project:enzo", "core-pain")?.content).toContain("2026-06-05");
-    expect(store.read("project:enzo", "what-we-solve-for")?.content).toContain("desktop app");
+    expect(store.read("project:acme", "core-thesis")?.content).toContain("2026-06-05");
+    expect(store.read("project:acme", "product-scope")?.content).toContain("desktop app");
     expect(store.recall({ query: "deploy" }).length).toBeGreaterThan(0);
   });
 });

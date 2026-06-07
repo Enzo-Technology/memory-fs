@@ -16,13 +16,6 @@ function assertHistory(turns: any[]) {
 }
 
 describe("fabricated histories", () => {
-  it("p2: ~10 turns, no tool calls, no store vocabulary", () => {
-    const h = load("p2-history.json");
-    expect(h.length).toBeGreaterThanOrEqual(8);
-    expect(h.length).toBeLessThanOrEqual(14);
-    assertHistory(h);
-  });
-
   it("p3: long, no tool calls, no store vocabulary", () => {
     const h = load("p3-history.json");
     expect(h.length).toBeGreaterThanOrEqual(24);
