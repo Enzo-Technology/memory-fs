@@ -1,0 +1,74 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    container: debian:12
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build and ship dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential python3 git curl ca-certificates \
+            rsync openssh-client
+
+      - name: Install Node.js (major from .nvmrc)
+        run: |
+          NODE_MAJOR=$(cat .nvmrc | tr -d '[:space:]')
+          curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash -
+          apt-get install -y --no-install-recommends nodejs
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Package artifact
+        run: |
+          tar -czf memory-fs-${{ github.sha }}.tar.gz dist/ node_modules/ package.json
+
+      - name: Load SSH key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Ship artifact
+        run: |
+          rsync -e "ssh -i ~/.ssh/deploy_key -p ${{ secrets.DEPLOY_PORT || '22' }}" \
+            --mkpath \
+            memory-fs-${{ github.sha }}.tar.gz \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/memory-fs/staging/${{ github.sha }}.tar.gz
+
+      - name: Ship activate.sh
+        run: |
+          rsync -e "ssh -i ~/.ssh/deploy_key -p ${{ secrets.DEPLOY_PORT || '22' }}" \
+            --mkpath \
+            --chmod=u+x \
+            deploy/activate.sh \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/memory-fs/bin/activate.sh
+
+      - name: Activate release
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            -p ${{ secrets.DEPLOY_PORT || '22' }} \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "sudo /opt/memory-fs/bin/activate.sh ${{ github.sha }} /opt/memory-fs/staging/${{ github.sha }}.tar.gz"
