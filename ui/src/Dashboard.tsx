@@ -1,9 +1,10 @@
 import { useEffect } from "react";
 import { authClient } from "./auth";
 import { Shell } from "./Shell";
+import { Browser } from "./Browser";
 
-// The session-gated app home — the seed of the memory browser. Anything that isn't
-// /sign-in, /sign-up, or /consent lands here.
+// The session-gated app home: the memory browser. Anything that isn't /sign-in, /sign-up, or
+// /consent lands here. Styling: .dashboard-bar.
 export function Dashboard() {
   const { data: session, isPending } = authClient.useSession();
 
@@ -15,14 +16,16 @@ export function Dashboard() {
   if (isPending || !session) return <Shell><p>…</p></Shell>;
 
   return (
-    <Shell>
-      <p>
-        Signed in as <strong>{session.user.email}</strong>.
-      </p>
-      <p>Memory browser coming soon.</p>
-      <button onClick={() => authClient.signOut().then(() => location.reload())}>
-        Sign out
-      </button>
+    <Shell wide>
+      <div className="dashboard-bar">
+        <span>
+          Signed in as <strong>{session.user.email}</strong>.
+        </span>
+        <button onClick={() => authClient.signOut().then(() => location.reload())}>
+          Sign out
+        </button>
+      </div>
+      <Browser />
     </Shell>
   );
 }
