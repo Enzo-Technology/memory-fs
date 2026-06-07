@@ -19,6 +19,16 @@ export const authContract = (baseUrl: string) => ({
   jwksUri: `${baseUrl}/api/auth/jwks`,
 });
 
+// Origins we trust: for Better Auth's CORS/CSRF below, and for the Streamable HTTP
+// Origin check on /mcp (DNS-rebinding defense, spec 2025-11-25). One list so the
+// origins we advertise and the ones we enforce cannot drift apart.
+export const trustedOrigins = (baseUrl: string) => [
+  "https://claude.ai",
+  "https://claude.com",
+  baseUrl,
+  "http://localhost:3000",
+];
+
 export const makeAuth = (db: Database, baseUrl: string) => {
   // Boundary check: a missing secret makes Better Auth fall back to a default
   // signing key, which silently mints forgeable tokens. Crash instead.
@@ -36,7 +46,7 @@ export const makeAuth = (db: Database, baseUrl: string) => {
       },
     },
     // CORS/CSRF origin trust (NOT redirect-uri allowlisting — DCR clients self-declare those).
-    trustedOrigins: ["https://claude.ai", "https://claude.com", baseUrl, "http://localhost:3000"],
+    trustedOrigins: trustedOrigins(baseUrl),
     // Google-only: the AS issues no password credentials. Sign-up/sign-in
     // happens through the social provider above, nothing else.
     emailAndPassword: { enabled: false },
