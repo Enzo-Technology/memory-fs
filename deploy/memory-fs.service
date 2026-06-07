@@ -4,8 +4,9 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=/usr/bin/node /opt/memory-fs/dist/index.js
-WorkingDirectory=/opt/memory-fs
+ExecStart=/usr/bin/node /opt/memory-fs/current/dist/index.js
+# current is an atomic symlink to the active release (releases/<sha>/).
+WorkingDirectory=/opt/memory-fs/current
 # Holds MEMORY_FS_HTTP_PORT, MEMORY_FS_DOMAIN, MEMORY_FS_DB, BETTER_AUTH_SECRET,
 # GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, BUCKET.
 # Provisioned on the host with mode 600 — never committed.
