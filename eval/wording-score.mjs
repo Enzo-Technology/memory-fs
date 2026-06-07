@@ -1,8 +1,8 @@
 // eval/wording-score.mjs — deterministic metrics from archived transcripts.
 // Turn IDs emitted by eval/scripts.mjs: "T1","T2","T3","T4","T5","P3b".
 // Matchers key on tool-name suffix only — noun prefix is condition-specific.
-const isWrite = (n) => /_write$/.test(n);
-const isRead = (n) => /_(read|search|browse|backlinks)$/.test(n);
+const isWrite = (n) => /_write$/.test(n) || n === "memory_note";
+const isRead = (n) => /_(read|search|browse|backlinks)$/.test(n) || n === "memory_recall";
 const isDelete = (n) => /_delete$/.test(n);
 
 // argStr: JSON-stringify the tool call input and lowercase, for safe substring matching.
@@ -13,8 +13,9 @@ export function scoreTurn(t) {
   const s = {};
 
   if (t.turn === "T1") {
-    // m1: any read/search/browse/backlinks call preceded the first assistant text
-    s.m1 = t.readBeforeAnswer ? 1 : 0;
+    // m1: a READ call (not any tool) preceded the first assistant text
+    const first = (t.toolCalls ?? [])[0];
+    s.m1 = (t.readBeforeAnswer && first && isRead(first.name)) ? 1 : 0;
   }
 
   if (t.turn === "T2") {

@@ -3,7 +3,7 @@ export function extractWrittenRecords(run) {
   const recs = [];
   for (const t of run.transcripts ?? [])
     for (const c of t.toolCalls ?? [])
-      if (/_write$/.test(c.name)) recs.push({ turn: t.turn, ...c.input });
+      if (/_write$/.test(c.name) || c.name === "memory_note") recs.push({ turn: t.turn, ...c.input });
   return recs;
 }
 

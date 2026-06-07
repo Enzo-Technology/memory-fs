@@ -211,6 +211,47 @@ describe("scoring", () => {
     expect(scoreTurn(t).m8).toBeNull();
   });
 
+  it("m4: fires for a PROD-style write (memory_note)", () => {
+    const t = {
+      turn: "T4",
+      toolCalls: [{ name: "memory_note", input: { content: "Ben's dog Rex barked" } }],
+    };
+    expect(scoreTurn(t).m4).toBe(1);
+  });
+
+  it("m5: credits a PROD-style durable deposit (memory_note with 'error code')", () => {
+    const t = {
+      turn: "T5",
+      toolCalls: [
+        {
+          name: "memory_note",
+          input: { content: "AppError type with error code", key: "error-handling-convention" },
+        },
+      ],
+    };
+    expect(scoreTurn(t).m5).toBe(1);
+  });
+
+  it("m1: zero when readBeforeAnswer is true but first tool is a write (memory_note)", () => {
+    const t = {
+      turn: "T1",
+      readBeforeAnswer: true,
+      toolCalls: [{ name: "memory_note", input: { content: "some write" } }],
+      finalText: "here",
+    };
+    expect(scoreTurn(t).m1).toBe(0);
+  });
+
+  it("m1: one when first tool is a PROD read (memory_recall) and readBeforeAnswer is true", () => {
+    const t = {
+      turn: "T1",
+      readBeforeAnswer: true,
+      toolCalls: [{ name: "memory_recall", input: { query: "acme" } }],
+      finalText: "Acme: ...",
+    };
+    expect(scoreTurn(t).m1).toBe(1);
+  });
+
   it("non-matching turn returns empty scores object", () => {
     const s = scoreTurn({ turn: "T1", readBeforeAnswer: false, toolCalls: [], finalText: "" });
     // Only m1 key should be present for T1
