@@ -1,6 +1,6 @@
 # Continuous deployment with minimal downtime — scoping
 
-**Status:** scoping / ready to pick up. Not yet implemented.
+**Status:** Tier 0 repo artifacts implemented (on branch); host provisioning + first cutover pending.
 **Goal:** push to `main` → memory-fs is live on the GCE box within minutes, with
 near-zero request downtime and automatic abort if the new build is unhealthy.
 
@@ -97,14 +97,25 @@ Code (this repo) — **done** (landed with this doc, on `feat/oauth-better-auth`
 - [x] Origin validation on `/mcp` (also closes [[0003-target-mcp-spec-2025-11-25]]).
 
 Infra:
-- [ ] `.github/workflows/deploy.yml`: build + test + package; gate deploy on green.
-- [ ] Decide the native-build strategy (see Open decisions) and implement step 2.
-- [ ] Release-dir + symlink layout under `/opt/memory-fs/releases/`; switch
+- [x] `.github/workflows/deploy.yml`: build + test + package; gate deploy on green.
+- [x] Decide the native-build strategy (see Open decisions) and implement step 2.
+      **Decision: (a) build in a `debian:12` container in CI** — fully off-box; Node major
+      read from `.nvmrc` at build time; better-sqlite3 native addon compiled once and
+      shipped in the tarball.
+- [x] Release-dir + symlink layout under `/opt/memory-fs/releases/`; switch
       `memory-fs.service` `ExecStart`/`WorkingDirectory` to `…/current`.
-- [ ] Ship/swap/restart script (idempotent, rollback = repoint symlink).
+- [x] Ship/swap/restart script (`deploy/activate.sh`): idempotent, rollback = repoint
+      symlink + restart; health-gates on `/health` 200 (30 s timeout); prunes old
+      releases keeping newest 5.
 - [ ] **Tier 1 only:** `memory-fs@.service` template + per-color env drop-ins; Caddy
       upstream-swap + `caddy reload`; idle-color health-poll-then-flip script.
-- [ ] Update `deploy/README.md` runbook + this doc's status.
+- [x] Update `deploy/README.md` runbook + this doc's status.
+
+Host (human's remaining work — NOT yet done):
+- [ ] Set GitHub Actions secrets: `DEPLOY_SSH_KEY`, `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PORT`.
+- [ ] Box-side prerequisites: deploy user + sudoers line + correct dir ownership (see `deploy/README.md`).
+- [ ] One-time migration from old layout to symlink layout + reinstall `memory-fs.service`.
+- [ ] First cutover: push to `main` and confirm CI deploy succeeds end-to-end.
 
 ## Open decisions (need a human or a quick spike)
 
@@ -113,15 +124,23 @@ Infra:
    arch/glibc/Node exactly; (b) ship source + `npm ci --omit=dev` on-box for the native
    rebuild only — simpler, keeps a little build load on the e2-micro. Recommend (a) if
    we can match the image cleanly, else (b).
+   **Resolved:** option (a) — build runs inside `debian:12` container in CI; Node major
+   read from `.nvmrc`; compiled `.node` addon shipped in the tarball.
 2. **Tier 0 vs Tier 1 to start.** Recommend Tier 0 — measure the actual restart blip
    against real MCP client retry behavior before building blue-green. Default to no on
    Tier 1 until the blip is shown to hurt.
+   **Resolved:** Tier 0 first. Tier 1 remains an upgrade option if the blip proves
+   material in practice.
 3. **How does the box authenticate to GitHub for the pull/rsync?** Deploy key, or a
    self-hosted runner on the box (heavier on an e2-micro), or push-from-CI over SSH with
    a deploy key. Recommend push-from-CI over SSH.
+   **Resolved:** push-from-CI over SSH with a deploy key. Secrets `DEPLOY_SSH_KEY`,
+   `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PORT` in GitHub Actions; box has a `deploy`
+   user with the matching authorized key and a scoped sudoers entry.
 4. **Backups around deploys.** `memory-fs-backup.timer` already snapshots the DB to GCS;
    confirm a fresh snapshot is taken (or is recent) before any deploy that runs a
    migration, so rollback has a matching DB.
+   *(Still open / operational — verify backup recency before any destructive migration.)*
 
 ## Why not multi-node / managed PaaS
 
