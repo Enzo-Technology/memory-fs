@@ -1,0 +1,54 @@
+{
+  "M":   { "noun": "memory",    "framing": "memory" },
+  "C":   { "noun": "context",   "framing": "context" },
+  "K":   { "noun": "knowledge", "framing": "knowledge" },
+  "N":   { "noun": "store",     "framing": "neutral" },
+  "MxC": { "noun": "memory",    "framing": "context" },
+  "CxM": { "noun": "context",   "framing": "memory" },
+
+  "framings": {
+    "memory": {
+      "write":     "Save a memory about the user or your past conversations so you can recall it later — names, preferences, what came up, and anything worth remembering.",
+      "read":      "Read a memory you saved earlier, by its exact location.",
+      "search":    "Search your memories about the user and past conversations by keyword.",
+      "browse":    "Look over the memories you have saved so far.",
+      "link":      "Connect two memories so you can recall them together later.",
+      "backlinks": "Find which of your memories refer back to this one.",
+      "delete":    "Forget a memory you no longer need to keep."
+    },
+    "context": {
+      "write":     "Write a record to the shared team context: key decisions, conventions, and direction the team relies on. Update it when direction changes.",
+      "read":      "Read a shared-context record by its exact location before you act on it.",
+      "search":    "Search the shared team context by keyword; read it before acting.",
+      "browse":    "Survey the shared team context so you know what the team already relies on.",
+      "link":      "Relate two shared-context records so the team can navigate between them.",
+      "backlinks": "Find which shared-context records depend on this one.",
+      "delete":    "Remove a shared-context record that no longer reflects the team's direction."
+    },
+    "knowledge": {
+      "write":     "Add an entry to the team knowledge base: settled facts, conventions, and reference material that are established and intended to be durable.",
+      "read":      "Read a knowledge-base entry by its exact location.",
+      "search":    "Search the team knowledge base of settled facts and conventions by keyword.",
+      "browse":    "Survey the team knowledge base of settled facts and conventions.",
+      "link":      "Relate two knowledge-base entries so readers can navigate between them.",
+      "backlinks": "Find which knowledge-base entries reference this one.",
+      "delete":    "Remove a knowledge-base entry that is no longer established or correct."
+    },
+    "neutral": {
+      "write":     "Write a record to the store.",
+      "read":      "Read a record from the store by its exact location.",
+      "search":    "Search records by keyword.",
+      "browse":    "List records in the store.",
+      "link":      "Relate two records.",
+      "backlinks": "Find records that reference this one.",
+      "delete":    "Delete a record."
+    }
+  },
+
+  "resultStrings": {
+    "memory":    { "write": "Memory saved.",            "delete": "Memory forgotten." },
+    "context":   { "write": "Shared context updated.",  "delete": "Shared-context record removed." },
+    "knowledge": { "write": "Knowledge base entry added.", "delete": "Knowledge-base entry removed." },
+    "neutral":   { "write": "Record written.",          "delete": "Record deleted." }
+  }
+}
