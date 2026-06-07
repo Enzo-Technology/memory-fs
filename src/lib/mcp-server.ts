@@ -36,6 +36,7 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
         "memory_note",
         {
             title: "Write a memory",
+            annotations: { readOnlyHint: false },
             description:
                 "Write a durable fact, decision, or preference to the SHARED memory store — visible " +
                 "to all agents, machines, and teammates, unlike your local session memory. " +
