@@ -1,0 +1,58 @@
+[
+  {
+    "role": "user",
+    "content": "Alright, let's pick up where we left off yesterday. We're wiring the onboarding flow for the CLI — the part where a new rep runs `enzo init` for the first time. Where did we land on what data we need upfront?"
+  },
+  {
+    "role": "assistant",
+    "content": "Where we landed: during `enzo init`, we collect three things — CRM type (Salesforce or HubSpot, no others in v1), the rep's territory tag (free text, used to scope the account list), and an API token for the CRM. We explicitly decided against asking for goal quotas or team hierarchy at init time; that comes later via `enzo configure`. The rationale was to keep the init flow under 60 seconds for a rep who's never touched a terminal before."
+  },
+  {
+    "role": "user",
+    "content": "Right, the 60-second target. Is that still realistic given the OAuth handshake we added for Salesforce?"
+  },
+  {
+    "role": "assistant",
+    "content": "Tighter than I'd like. The Salesforce OAuth browser pop-up adds roughly 15–25 seconds on a first auth (browser launch + consent click), which leaves maybe 35 seconds for the rest. That's workable if we pre-generate the callback server and don't wait on token exchange synchronously — we can show a spinner and let the exchange happen in the background while we ask for the territory tag. HubSpot's flow is a simpler API key paste so no drama there."
+  },
+  {
+    "role": "user",
+    "content": "Let's park the OAuth timing question for now and focus on the error path. If the CRM token is wrong, what does the rep see?"
+  },
+  {
+    "role": "assistant",
+    "content": "Currently it's a raw HTTP 401 printed to stderr — which is terrible. There's no consistent shape to the failures: sometimes you get a full stack trace, sometimes just a one-liner, sometimes nothing useful at all. The support team can't triage from what we're emitting now. We know we need to clean this up — user-facing errors should have a short human-readable message and a pointer to where to get help — but we haven't landed on the exact format yet. It's one of the rougher edges in the current codebase."
+  },
+  {
+    "role": "user",
+    "content": "Good. What about the happy path — once init succeeds, what's the first thing the rep actually sees?"
+  },
+  {
+    "role": "assistant",
+    "content": "A summary screen: their territory tag, how many accounts we found in that territory (pulled live from the CRM during init), and the next suggested command (`enzo status` to see their top accounts by urgency score). We render it with a two-column layout — label on the left, value on the right — using the same table helper we built for `enzo list`. Nothing animated, nothing that requires cursor positioning, so it works in dumb terminals and CI output redirection."
+  },
+  {
+    "role": "user",
+    "content": "Nice. One thing we haven't nailed: where does enzo store its local config after init? I know we discussed a few options."
+  },
+  {
+    "role": "assistant",
+    "content": "We kicked around three: `~/.config/enzo/config.toml` (TOML, XDG-compliant), `~/.enzo/config.json` (JSON, simpler path), and tucking it inside the project directory as `.enzo.json` (no global state). The TOML option got traction briefly because it's more human-editable, but we pulled back — our config isn't complex enough to justify the TOML parser dependency, and JSON is already in the stdlib for most toolchains. We landed on `~/.enzo/config.json`. The XDG path is a nice-to-have we can add later without breaking the format."
+  },
+  {
+    "role": "user",
+    "content": "Alright, `~/.enzo/config.json` it is. Do we have error handling if that file gets corrupted or has unexpected fields?"
+  },
+  {
+    "role": "assistant",
+    "content": "Partial. We validate with a Zod schema on load, and if validation fails we bail with a generic error message and tell the user to re-run `enzo init --reset` — we don't try to auto-heal a corrupted config because that path is thorny. The error output isn't great right now; it just surfaces whatever Zod throws, which isn't user-friendly. Unexpected extra fields we strip silently (Zod `.strip()` behavior), so a newer CLI reading an old config file works fine. We do NOT write back after stripping, so the file on disk isn't mutated by a read."
+  },
+  {
+    "role": "user",
+    "content": "That's clean. Last thing before I have to jump to a call — is the onboarding flow covered by integration tests yet?"
+  },
+  {
+    "role": "assistant",
+    "content": "Not properly. We have a unit test for the Zod schema validation and a smoke test that runs `enzo init --dry-run` and checks the exit code. The full flow — including the OAuth callback, account fetch, and summary screen — is not covered by automated tests yet. That's a gap. The OAuth piece is the hard part because it requires a browser; we'd probably need to stub the callback server in tests rather than actually launch a browser."
+  }
+]
