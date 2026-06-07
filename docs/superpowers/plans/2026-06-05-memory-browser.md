@@ -35,14 +35,18 @@
 - `tests/server.http.test.ts` — add one integration case: `/api/memories` with no cookie → 401.
 
 **UI (create):**
+- `ui/src/styles.css` — the **styling shell**: design tokens (placeholders), structural layout, and empty class hooks. Deliberately minimal — the visual design lands here in a later pass.
 - `ui/src/api.ts` — the three endpoints, the only holder of URLs + `credentials:"include"`.
 - `ui/src/useBrowser.ts` — all browse/search/detail state.
 - `ui/src/Facets.tsx`, `ui/src/MemoryList.tsx`, `ui/src/MemoryDetail.tsx` — props-only panes.
 - `ui/src/Browser.tsx` — logic-free composer.
 
 **UI (modify):**
-- `ui/src/Shell.tsx` — add an optional `wide` prop for the 3-pane layout.
+- `ui/src/main.tsx` — import `styles.css` once (global stylesheet).
+- `ui/src/Shell.tsx` — add an optional `wide` prop; move to `className` hooks.
 - `ui/src/Dashboard.tsx` — render `<Browser/>` instead of "coming soon".
+
+**Styling approach:** components carry semantic `className`s and the structural layout (grid columns, stack gaps) lives in `styles.css`; visual polish (color, type scale, hover/selected states) is left as `TODO(style)` hooks. No inline visual styling scattered through components — one place to style later.
 
 ---
 
@@ -485,12 +489,146 @@ git commit -m "feat(ui): memory browser data layer (api.ts)"
 
 ---
 
-## Task 5: Widen the Shell for a 3-pane layout
+## Task 5: Styling shell (`styles.css`)
+
+The one place styling lives. Tokens + structural layout + empty class hooks — minimal on purpose; the real visual design happens here later. Everything after this references these classes instead of inline styles.
+
+**Files:**
+- Create: `ui/src/styles.css`
+- Modify: `ui/src/main.tsx` (add one import)
+
+- [ ] **Step 1: Write the stylesheet**
+
+```css
+/* ui/src/styles.css
+ * Styling shell. Tokens + structural layout + class hooks — deliberately minimal. The visual
+ * design (color, type scale, spacing polish, hover/selected states) goes here in a later pass;
+ * for now this gives every component a home for styles and just enough layout to function.
+ */
+:root {
+  /* Design tokens — fill in during the styling pass. */
+  --space: 1rem;
+  --space-sm: 0.5rem;
+  --space-xs: 0.25rem;
+  --maxw: 72rem;
+  --maxw-narrow: 24rem;
+  /* TODO(style): color / surface / border / radius / type-scale tokens */
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  font-family: system-ui;
+}
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+/* Layout primitives — structure only, no visual design yet. */
+.shell {
+  max-width: var(--maxw);
+  margin: 2rem auto;
+  padding: 0 var(--space);
+  display: grid;
+  gap: var(--space);
+}
+.shell--narrow {
+  max-width: var(--maxw-narrow);
+  margin: 4rem auto;
+}
+
+.dashboard-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.browser {
+  display: grid;
+  grid-template-columns: 8rem 22rem 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+.facets {
+  display: grid;
+  gap: var(--space-xs);
+  align-content: start;
+}
+.list {
+  display: grid;
+  gap: var(--space-sm);
+  align-content: start;
+}
+.detail {
+  display: grid;
+  gap: var(--space);
+  align-content: start;
+}
+.detail__content {
+  white-space: pre-wrap;
+  margin: 0;
+}
+.neighbours {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+/* Class hooks for rows/buttons — layout enough to be usable; style the rest later. */
+.item {
+  text-align: left;
+  display: grid;
+  gap: var(--space-xs);
+}
+.facet {
+  text-align: left;
+}
+.facet--active {
+  font-weight: 700;
+}
+
+/* TODO(style): .item:hover, selected state, .item__snippet treatment, .detail__header, etc. */
+```
+
+- [ ] **Step 2: Import it once, globally**
+
+Replace the entire contents of `ui/src/main.tsx` with:
+
+```typescript
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { App } from "./App";
+import "./styles.css";
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+);
+```
+
+- [ ] **Step 3: Build to verify the stylesheet is picked up**
+
+Run: `npm run build:ui`
+Expected: PASS — `vite build ui` succeeds and emits a CSS asset into `dist/ui/assets`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add ui/src/styles.css ui/src/main.tsx
+git commit -m "feat(ui): styling shell (tokens, layout, class hooks)"
+```
+
+---
+
+## Task 6: Widen the Shell for a 3-pane layout
 
 **Files:**
 - Modify: `ui/src/Shell.tsx`
 
-- [ ] **Step 1: Add a `wide` prop**
+- [ ] **Step 1: Add a `wide` prop, styled via the shell classes**
 
 Replace the entire contents of `ui/src/Shell.tsx` with:
 
@@ -499,7 +637,8 @@ import type { ReactNode } from "react";
 
 // Shared page chrome. Every screen is a centered card; factoring it here keeps the
 // route components about behavior, not layout. `wide` swaps the narrow auth-card width for a
-// full-width canvas — the memory browser's three panes need the room.
+// full-width canvas — the memory browser's three panes need the room. Visual styling lives in
+// styles.css (.shell / .shell--narrow), not here.
 export function Shell({
   title = "memory-fs",
   wide = false,
@@ -510,16 +649,7 @@ export function Shell({
   children: ReactNode;
 }) {
   return (
-    <main
-      style={{
-        fontFamily: "system-ui",
-        maxWidth: wide ? "72rem" : "24rem",
-        margin: wide ? "2rem auto" : "4rem auto",
-        padding: "0 1rem",
-        display: "grid",
-        gap: "1rem",
-      }}
-    >
+    <main className={wide ? "shell" : "shell shell--narrow"}>
       <h1>{title}</h1>
       {children}
     </main>
@@ -541,7 +671,7 @@ git commit -m "feat(ui): optional wide layout in Shell for the browser"
 
 ---
 
-## Task 6: Browser state hook (`useBrowser.ts`)
+## Task 7: Browser state hook (`useBrowser.ts`)
 
 **Files:**
 - Create: `ui/src/useBrowser.ts`
@@ -659,7 +789,9 @@ git commit -m "feat(ui): useBrowser state/orchestration hook"
 
 ---
 
-## Task 7: The three panes
+## Task 8: The three panes
+
+Props-only panes carrying semantic `className`s from the styling shell — no inline visual styling. Structure comes from `styles.css`; visual polish is left for the styling pass.
 
 **Files:**
 - Create: `ui/src/Facets.tsx`, `ui/src/MemoryList.tsx`, `ui/src/MemoryDetail.tsx`
@@ -669,7 +801,7 @@ git commit -m "feat(ui): useBrowser state/orchestration hook"
 ```typescript
 // ui/src/Facets.tsx
 // The lens switcher. Props in, events out — no fetching, no state. Lenses limited to those that
-// resolve to memory items the user can open (tags deferred — see spec).
+// resolve to memory items the user can open (tags deferred — see spec). Styling: .facets / .facet.
 import type { Facet } from "./api";
 
 const FACETS: Facet[] = ["recent", "namespaces", "hubs", "orphans"];
@@ -682,12 +814,12 @@ export function Facets({
   onSelect: (f: Facet) => void;
 }) {
   return (
-    <nav style={{ display: "grid", gap: "0.25rem", alignContent: "start" }}>
+    <nav className="facets">
       {FACETS.map((f) => (
         <button
           key={f}
           onClick={() => onSelect(f)}
-          style={{ fontWeight: f === active ? 700 : 400, textAlign: "left" }}
+          className={f === active ? "facet facet--active" : "facet"}
         >
           {f}
         </button>
@@ -703,7 +835,8 @@ export function Facets({
 // ui/src/MemoryList.tsx
 // Search box + the current list. Renders search results when present; otherwise switches on the
 // browse lens: namespaces → drill-in rows; recent/hubs/orphans → openable memory rows. Props
-// only — the kind→render mapping is presentation, the data shaping lives upstream.
+// only — the kind→render mapping is presentation, the data shaping lives upstream. Styling: .list
+// / .item / .item__snippet.
 import type { BrowseResult } from "../../src/core/store";
 import type { Row } from "./useBrowser";
 
@@ -723,8 +856,9 @@ export function MemoryList({
   onNamespace: (namespace: string) => void;
 }) {
   return (
-    <section style={{ display: "grid", gap: "0.5rem", alignContent: "start" }}>
+    <section className="list">
       <input
+        className="list__search"
         value={query}
         placeholder="Search…"
         onChange={(e) => onQuery(e.target.value)}
@@ -782,9 +916,9 @@ function Item({
   onClick: () => void;
 }) {
   return (
-    <button onClick={onClick} style={{ textAlign: "left", display: "grid", gap: "0.15rem" }}>
+    <button className="item" onClick={onClick}>
       <strong>{title}</strong>
-      <span style={{ opacity: 0.7, fontSize: "0.85em" }}>{snippet}</span>
+      <span className="item__snippet">{snippet}</span>
     </button>
   );
 }
@@ -796,7 +930,8 @@ function Item({
 // ui/src/MemoryDetail.tsx
 // One memory: its content as text, plus its depth-1 neighbourhood (children + backlinks) as
 // clickable rows — that is the wikilink/backlink navigation. The `read` call already returns the
-// neighbourhood, so no extra fetching here. Props only.
+// neighbourhood, so no extra fetching here. Props only. Styling: .detail / .detail__content /
+// .neighbours.
 import type { ReadResult } from "../../src/core/store";
 
 export function MemoryDetail({
@@ -808,18 +943,18 @@ export function MemoryDetail({
 }) {
   if (!detail) {
     return (
-      <section style={{ opacity: 0.6 }}>
+      <section className="detail detail--empty">
         <p>Select a memory.</p>
       </section>
     );
   }
   return (
-    <section style={{ display: "grid", gap: "1rem", alignContent: "start" }}>
-      <header>
+    <section className="detail">
+      <header className="detail__header">
         <strong>{detail.namespace}/{detail.key}</strong>
-        <div style={{ opacity: 0.7, fontSize: "0.85em" }}>{detail.type}</div>
+        <div className="detail__type">{detail.type}</div>
       </header>
-      <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>{detail.content}</pre>
+      <pre className="detail__content">{detail.content}</pre>
       <Neighbours title="Links" items={detail.children} onNavigate={onNavigate} />
       <Neighbours title="Backlinks" items={detail.backlinks} onNavigate={onNavigate} />
     </section>
@@ -837,15 +972,15 @@ function Neighbours({
 }) {
   if (items.length === 0) return null;
   return (
-    <div style={{ display: "grid", gap: "0.25rem" }}>
+    <div className="neighbours">
       <em>{title}</em>
       {items.map((n) => (
         <button
           key={`${n.namespace}/${n.key}`}
+          className="neighbour"
           onClick={() => onNavigate(n.namespace, n.key)}
-          style={{ textAlign: "left" }}
         >
-          {n.namespace}/{n.key} <span style={{ opacity: 0.6 }}>({n.relation})</span>
+          {n.namespace}/{n.key} <span className="neighbour__relation">({n.relation})</span>
         </button>
       ))}
     </div>
@@ -867,7 +1002,7 @@ git commit -m "feat(ui): Facets, MemoryList, MemoryDetail panes"
 
 ---
 
-## Task 8: Compose the browser and wire it into Dashboard
+## Task 9: Compose the browser and wire it into Dashboard
 
 **Files:**
 - Create: `ui/src/Browser.tsx`
@@ -879,7 +1014,7 @@ git commit -m "feat(ui): Facets, MemoryList, MemoryDetail panes"
 // ui/src/Browser.tsx
 // The composer: calls useBrowser and wires its view-model + actions into the three panes. No
 // logic of its own — if a derived/massaged prop is ever needed, it belongs in useBrowser, not
-// here (keeps this from rotting into a pass-through layer).
+// here (keeps this from rotting into a pass-through layer). Styling: .browser.
 import { useBrowser } from "./useBrowser";
 import { Facets } from "./Facets";
 import { MemoryList } from "./MemoryList";
@@ -888,14 +1023,7 @@ import { MemoryDetail } from "./MemoryDetail";
 export function Browser() {
   const vm = useBrowser();
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "8rem 22rem 1fr",
-        gap: "1.5rem",
-        alignItems: "start",
-      }}
-    >
+    <div className="browser">
       <Facets active={vm.facet} onSelect={vm.selectFacet} />
       <MemoryList
         query={vm.query}
@@ -922,7 +1050,7 @@ import { Shell } from "./Shell";
 import { Browser } from "./Browser";
 
 // The session-gated app home: the memory browser. Anything that isn't /sign-in, /sign-up, or
-// /consent lands here.
+// /consent lands here. Styling: .dashboard-bar.
 export function Dashboard() {
   const { data: session, isPending } = authClient.useSession();
 
@@ -935,7 +1063,7 @@ export function Dashboard() {
 
   return (
     <Shell wide>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+      <div className="dashboard-bar">
         <span>
           Signed in as <strong>{session.user.email}</strong>.
         </span>
@@ -963,7 +1091,7 @@ git commit -m "feat(ui): compose the memory browser into the dashboard"
 
 ---
 
-## Task 9: Full build + manual acceptance
+## Task 10: Full build + manual acceptance
 
 **Files:** none (verification only)
 
@@ -1008,7 +1136,8 @@ git commit -m "chore: memory browser manual-acceptance pass"
 
 ## Self-Review Notes
 
-- **Spec coverage:** session/cookie data path (Tasks 1, 3); three endpoints (Task 2); no principal scoping (Task 2 comment + 401-only gate); `api.ts`/`useBrowser`/three panes/composer (Tasks 4, 6, 7, 8); shared types imported not re-declared (Task 4); logic-free composer (Task 8); facets recent/namespaces/hubs/orphans, tags deferred (Tasks 4, 7); widened Shell (Task 5); read-only — no write endpoints or UI anywhere.
-- **Deferred (per spec, intentionally absent):** tags facet, markdown rendering, `[[wikilink]]`-in-body linkifying, any write path.
+- **Spec coverage:** session/cookie data path (Tasks 1, 3); three endpoints (Task 2); no principal scoping (Task 2 comment + 401-only gate); `api.ts`/`useBrowser`/three panes/composer (Tasks 4, 7, 8, 9); shared types imported not re-declared (Task 4); logic-free composer (Task 9); facets recent/namespaces/hubs/orphans, tags deferred (Tasks 4, 8); widened Shell (Task 6); read-only — no write endpoints or UI anywhere.
+- **Styling shell (per the "style later" instruction):** `styles.css` (Task 5) holds tokens + structural layout + empty class hooks; every component (Tasks 6, 8, 9) carries semantic `className`s and no inline visual styling. Visual design is intentionally minimal now, with `TODO(style)` hooks marking where it lands later.
+- **Deferred (per spec, intentionally absent):** tags facet, markdown rendering, `[[wikilink]]`-in-body linkifying, any write path. Visual polish (color, type scale, states) deferred to the styling pass.
 - **Type consistency:** `Facet` (`api.ts`) is the UI lens subset; `BrowseKind` (store) is the server union validated in `browse-api.ts`. `Row` is defined in `useBrowser.ts` and consumed by `MemoryList`. `Session` defined in `session.ts`, consumed by `browse-api.ts`. Guard signature `(req) => Promise<Session>` matches between `session.ts` and `browse-api.ts`'s `RequireSession`.
-- **No component test harness introduced:** consistent with the existing codebase; browse logic is covered at the server boundary (Task 2), UI by build + manual acceptance (Task 9).
+- **No component test harness introduced:** consistent with the existing codebase; browse logic is covered at the server boundary (Task 2), UI by build + manual acceptance (Task 10).
