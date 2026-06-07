@@ -4,10 +4,12 @@
 import { useEffect, useState } from "react";
 import { listMemories, readMemory, recall, type Facet } from "./api";
 import type { BrowseResult, ReadResult } from "../../src/core/store";
+import type { MemoryType } from "../../src/core/db";
 
 export interface Row {
   namespace: string;
   key: string;
+  type: MemoryType;
   snippet: string;
 }
 
@@ -40,7 +42,12 @@ export function useBrowser(): BrowserView {
       recall(trimmed).then((ms) => {
         if (live)
           setResults(
-            ms.map((m) => ({ namespace: m.namespace, key: m.key, snippet: m.content.slice(0, 140) })),
+            ms.map((m) => ({
+              namespace: m.namespace,
+              key: m.key,
+              type: m.type,
+              snippet: m.content.slice(0, 140),
+            })),
           );
       });
     } else {
