@@ -1,0 +1,90 @@
+/* ui/src/styles.css
+ * Styling shell. Tokens + structural layout + class hooks — deliberately minimal. The visual
+ * design (color, type scale, spacing polish, hover/selected states) goes here in a later pass;
+ * for now this gives every component a home for styles and just enough layout to function.
+ */
+:root {
+  /* Design tokens — fill in during the styling pass. */
+  --space: 1rem;
+  --space-sm: 0.5rem;
+  --space-xs: 0.25rem;
+  --maxw: 72rem;
+  --maxw-narrow: 24rem;
+  /* TODO(style): color / surface / border / radius / type-scale tokens */
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  font-family: system-ui;
+}
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+/* Layout primitives — structure only, no visual design yet. */
+.shell {
+  max-width: var(--maxw);
+  margin: 2rem auto;
+  padding: 0 var(--space);
+  display: grid;
+  gap: var(--space);
+}
+.shell--narrow {
+  max-width: var(--maxw-narrow);
+  margin: 4rem auto;
+}
+
+.dashboard-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.browser {
+  display: grid;
+  grid-template-columns: 8rem 22rem 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+.facets {
+  display: grid;
+  gap: var(--space-xs);
+  align-content: start;
+}
+.list {
+  display: grid;
+  gap: var(--space-sm);
+  align-content: start;
+}
+.detail {
+  display: grid;
+  gap: var(--space);
+  align-content: start;
+}
+.detail__content {
+  white-space: pre-wrap;
+  margin: 0;
+}
+.neighbours {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+/* Class hooks for rows/buttons — layout enough to be usable; style the rest later. */
+.item {
+  text-align: left;
+  display: grid;
+  gap: var(--space-xs);
+}
+.facet {
+  text-align: left;
+}
+.facet--active {
+  font-weight: 700;
+}
+
+/* TODO(style): .item:hover, selected state, .item__snippet treatment, .detail__header, etc. */
