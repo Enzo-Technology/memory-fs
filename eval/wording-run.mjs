@@ -27,8 +27,17 @@ const MODELS = {
 
 function resolveClient(modelKey) {
   const { provider, id } = MODELS[modelKey];
-  if (provider === "openai") return { client: makeOpenAIClient(id), id };
-  return { client: new Anthropic(), id };
+  if (provider === "openai") return { client: makeOpenAIClient(id), id, provider };
+  return { client: new Anthropic(), id, provider };
+}
+
+// Provider-specific create() config: both reason at LOW effort (cost trim + matched depth).
+// anthropic → adaptive thinking + effort:low, temperature omitted (avoids thinking+temp 400).
+// openai (reasoning model) → reasoning_effort:low.
+function createConfigFor(provider) {
+  return provider === "openai"
+    ? { extraCreateArgs: {}, temperature: 1.0, maxTokens: 4096 }
+    : { extraCreateArgs: { thinking: { type: "adaptive" }, output_config: { effort: "low" } }, temperature: null, maxTokens: 4096 };
 }
 
 // --pilot: M+C × sonnet (Claude) × P1,P2,P3b × n=5 — the initial Claude baseline.
@@ -72,7 +81,7 @@ function resolveHistory(script, iter) {
   return { baseHistory: script.history ?? [], historySource: "history" };
 }
 
-async function runScript({ anthropic, modelId, condition, model, scriptId, iter }) {
+async function runScript({ anthropic, modelId, condition, model, scriptId, iter, createConfig }) {
   const script = SCRIPTS[scriptId];
   const { baseHistory, historySource } = resolveHistory(script, iter);
   const transcripts = [];
@@ -89,7 +98,7 @@ async function runScript({ anthropic, modelId, condition, model, scriptId, iter 
     }
     shared.messages.push({ role: "user", content: turn.text });
     const r = await runAgentLoop({ anthropic, mcp: shared.client, model: modelId,
-      system: NEUTRAL_SP, tools: shared.tools, messages: shared.messages, maxSteps: 10 });
+      system: NEUTRAL_SP, tools: shared.tools, messages: shared.messages, maxSteps: 6, ...createConfig });
     // Empty assistant content would cause the next turn's API call to reject.
     shared.messages.push({ role: "assistant", content: r.finalText?.trim() ? r.finalText : "(no further comment)" });
     transcripts.push({ turn: turn.id, toolOrder: shared.order, historySource, ...r });
@@ -104,9 +113,10 @@ async function main() {
     for (const model of MATRIX.models)
       for (const scriptId of MATRIX.scripts)
         for (let iter = 0; iter < MATRIX.n; iter++) {
-          const { client: anthropic, id: modelId } = resolveClient(model);
+          const { client: anthropic, id: modelId, provider } = resolveClient(model);
+          const createConfig = createConfigFor(provider);
           let transcripts;
-          try { transcripts = await runScript({ anthropic, modelId, condition, model, scriptId, iter }); }
+          try { transcripts = await runScript({ anthropic, modelId, condition, model, scriptId, iter, createConfig }); }
           catch (e) { console.error(`\n[excluded] ${condition}/${model}/${scriptId}#${iter}: ${e.message}`); continue; }
           const dir = resolve(ARTIFACTS, condition, model, scriptId);
           mkdirSync(dir, { recursive: true });

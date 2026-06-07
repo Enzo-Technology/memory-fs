@@ -60,7 +60,7 @@ function toAnthropicResponse(data) {
   }
   const fr = choice.finish_reason;
   const stop_reason = fr === "tool_calls" ? "tool_use" : fr === "length" ? "max_tokens" : "end_turn";
-  return { content, stop_reason };
+  return { content, stop_reason, usage: { input_tokens: data.usage?.prompt_tokens ?? 0, output_tokens: data.usage?.completion_tokens ?? 0 } };
 }
 
 export function makeOpenAIClient(modelId) {
@@ -71,6 +71,7 @@ export function makeOpenAIClient(modelId) {
           model: modelId,
           max_completion_tokens: req.max_tokens ?? 1024,
           temperature: req.temperature ?? 1.0,
+          ...(req.reasoning_effort ? { reasoning_effort: req.reasoning_effort } : {}),
           messages: toOpenAIMessages(req.system, req.messages),
           ...(req.tools?.length ? {
             tools: toOpenAITools(req.tools),
