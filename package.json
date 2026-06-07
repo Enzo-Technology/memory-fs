@@ -20,7 +20,13 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "dev:ui": "vite build ui --watch",
-    "build:ui": "vite build ui"
+    "build:ui": "vite build ui",
+    "eval:snapshot": "node eval/snapshot-surfaces.mjs",
+    "eval:pilot": "node eval/wording-run.mjs --pilot",
+    "eval:full": "node eval/wording-run.mjs --full",
+    "eval:score": "node eval/wording-score.mjs",
+    "eval:judge": "node eval/wording-judge.mjs",
+    "eval:analyze": "node eval/analysis.mjs"
   },
   "dependencies": {
     "@better-auth/oauth-provider": "^1.6.13",
