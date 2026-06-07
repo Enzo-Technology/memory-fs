@@ -142,6 +142,7 @@ chown deploy:deploy /opt/memory-fs/staging /opt/memory-fs/bin
 # 2. Seed the currently-running code as a named release.
 #    Use the current HEAD sha or any identifier that won't collide with real SHAs.
 SHA=$(git -C /opt/memory-fs rev-parse HEAD)
+mkdir -p /opt/memory-fs/releases/${SHA}
 cp -a /opt/memory-fs/dist   /opt/memory-fs/releases/${SHA}/dist
 cp -a /opt/memory-fs/node_modules /opt/memory-fs/releases/${SHA}/node_modules
 cp    /opt/memory-fs/package.json /opt/memory-fs/releases/${SHA}/package.json
