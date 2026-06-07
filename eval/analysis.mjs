@@ -29,7 +29,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const fmtRD = (rd) => `${(rd.diff*100).toFixed(0)}pp [${(rd.lo*100).toFixed(0)}, ${(rd.hi*100).toFixed(0)}]`;
   // Preregistered primary pairs (spec §8): H1 (M vs C on m4/T4), H2 (M vs C on m1/T1).
   // Reported separately per model.
-  const models = ["claude", "openai"];
+  // Detect which models actually have data (e.g. "sonnet", "openai").
+  const models = [...new Set(scores.map((r) => r.model))].sort();
   const lines = [
     "# RESULTS — tool-wording experiment",
     "",
@@ -48,10 +49,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     lines.push(`- **H2** (context reads more at cold start, m1/T1): RD = ${fmtRD(h2)}.`);
     lines.push("");
   }
-  lines.push("## Provider comparison");
-  lines.push(`- H1 M-vs-C gap: claude ${(gaps.claude.h1*100).toFixed(0)}pp vs openai ${(gaps.openai.h1*100).toFixed(0)}pp`);
-  lines.push(`- H2 M-vs-C gap: claude ${(gaps.claude.h2*100).toFixed(0)}pp vs openai ${(gaps.openai.h2*100).toFixed(0)}pp`);
-  lines.push("");
+  if (models.length >= 2) {
+    lines.push("## Provider comparison (M-vs-C gap by model)");
+    lines.push(`- **H1** (trivia, m4/T4): ${models.map((m) => `${m} ${(gaps[m].h1 * 100).toFixed(0)}pp`).join(" vs ")}`);
+    lines.push(`- **H2** (cold-start read, m1/T1): ${models.map((m) => `${m} ${(gaps[m].h2 * 100).toFixed(0)}pp`).join(" vs ")}`);
+    lines.push("");
+  }
   lines.push("## Per-cell rates");
   lines.push("_(extend: loop conditions × metrics, print wilson() for each)_");
   const md = lines.join("\n");

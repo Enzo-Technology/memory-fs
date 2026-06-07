@@ -22,7 +22,7 @@ const MODELS = {
   sonnet: { provider: "anthropic", id: "claude-sonnet-4-6" },
   opus: { provider: "anthropic", id: "claude-opus-4-8" },
   claude: { provider: "anthropic", id: "claude-sonnet-4-6" },
-  openai: { provider: "openai", id: "gpt-4.1" },
+  openai: { provider: "openai", id: "gpt-5.5" },
 };
 
 function resolveClient(modelKey) {
@@ -31,10 +31,16 @@ function resolveClient(modelKey) {
   return { client: new Anthropic(), id };
 }
 
-// --pilot: M+C × claude+openai × P1,P2 × n=5. --full: the §3 concentrated grid (fill in after pilot).
+// --pilot: M+C × sonnet (Claude) × P1,P2,P3b × n=5 — the initial Claude baseline.
+// --pilot-openai: same matrix but the OpenAI model — run separately so the two providers
+//   write into the same archive (model=sonnet vs model=openai) for a paired comparison.
+// --full: the §3 concentrated grid.
+const PILOT_OPENAI = process.argv.includes("--pilot-openai");
 const PILOT = process.argv.includes("--pilot");
-const MATRIX = PILOT
-  ? { conditions: ["M", "C"], models: ["claude", "openai"], scripts: ["P1", "P2"], n: 5 }
+const MATRIX = PILOT_OPENAI
+  ? { conditions: ["M", "C"], models: ["openai"], scripts: ["P1", "P2", "P3b"], n: 5 }
+  : PILOT
+  ? { conditions: ["M", "C"], models: ["sonnet"], scripts: ["P1", "P2", "P3b"], n: 5 }
   : { conditions: ["M", "C", "K", "N", "MxC", "CxM", "PROD"], models: ["haiku", "sonnet", "opus"], scripts: ["P1", "P2", "P3b"], n: 20 };
 
 function shuffleLogged(tools) {

@@ -23,6 +23,7 @@
     "build:ui": "vite build ui",
     "eval:snapshot": "node eval/snapshot-surfaces.mjs",
     "eval:pilot": "node eval/wording-run.mjs --pilot",
+    "eval:pilot:openai": "node eval/wording-run.mjs --pilot-openai",
     "eval:full": "node eval/wording-run.mjs --full",
     "eval:score": "node eval/wording-score.mjs",
     "eval:judge": "node eval/wording-judge.mjs",
