@@ -1,7 +1,14 @@
 # Memory browser — filesystem-tree IA + Foundations grid — design
 
 Date: 2026-06-07
-Status: draft, pending review
+Status: scoped to P1 after brainstorm (2026-06-07), pending plan
+
+**Milestone (this spec's build target): P1 — "the shape."** Full-viewport app
+shell, client-side namespace tree with lazy leaves, **four** working lenses
+(Namespaces / Recent / Hubs / Orphans), split reading pane, address-as-route,
+full-page drill. Pure reads against the existing API — **zero backend change.**
+Everything else (⌘K palette, Tags lens, prune, inline/dangling wikilinks, full
+state matrix) is P2. The brainstorm decisions are recorded in *Decisions* below.
 Supersedes the UI half of `2026-06-05-memory-browser-design.md` (the read API and
 session auth from that spec stand; this changes the IA and visual layout).
 Source of intent: Ben's `Memory Browser Spec (offline).html` (orient/read/prune),
@@ -75,16 +82,21 @@ tree client-side. Only leaf contents are fetched on demand.
 ### Lenses re-cut the same store (mode/filters, on top)
 
 A horizontal lens row sits above the tree. Selecting a lens **swaps what
-populates the left pane; it never changes the layout.**
+populates the left pane; it never changes the layout.** **P1 ships four lenses:**
 
 - **Namespaces** — the hierarchical tree (default).
 - **Recent** — flat list by `updated_at` desc (`browse?kind=recent`).
 - **Hubs** — by inbound link count (`browse?kind=hubs`, render `in_degree`).
 - **Orphans** — no links in or out (`browse?kind=orphans`); prune candidates.
-- **Tags** — tag vocabulary with counts (`browse?kind=tags`); picking one filters
-  the store. *(See Decisions — tag→list needs a backend answer.)*
+- **Tags** *(P2)* — tag vocabulary with counts (`browse?kind=tags`); picking one
+  filters the store. Needs a list-by-tag backend (see Decisions). Tags remain
+  visible in the reader's tag row and full-text searchable in P1 regardless.
 
 A running total (`248 memories · 14 namespaces`) pins to the right of the row.
+
+Search stays in P1 as a working top-bar field bound to `recall` (results
+populate the left pane). The ⌘K command-palette treatment of it is P2 — P1 does
+not drop search, it just doesn't elevate it to a palette.
 
 ### Address is the route
 
@@ -100,7 +112,7 @@ The browser is a **full-viewport app**, not a centered card. The current wide
 
 ```
 ┌ top bar ───────────────────────────────────── 60px ┐  wordmark · search(⌘K) · account
-├ lens row ────────────────────────────────────  50px ┤  five lenses · total pinned right
+├ lens row ────────────────────────────────────  50px ┤  lenses · total pinned right
 ├ body (flex:1, min-height:0) ───────────────────────┤
 │  tree pane         │  reading pane                  │
 │  340px, collapsible│  1fr                            │
@@ -130,7 +142,7 @@ than re-deriving.
 
 - **Top bar:** wordmark, wide global search field bound to ⌘K (full-text recall,
   **not** a tree filter), account.
-- **Lens row:** the five lenses + running total.
+- **Lens row:** the lenses (four in P1) + running total.
 - **Tree pane:** Finder-style disclosure; folders show counts, leaves show a type
   dot + backlink count; **multiple branches open at once**; `expand all` in the
   pane header.
@@ -155,12 +167,12 @@ Opening a memory for sustained attention collapses the tree to a centered read:
 | Folder leaves / Recent lens | `browse?kind=recent[&namespace=…]` | scoped → folder contents; unscoped → Recent |
 | Hubs lens | `browse?kind=hubs` | render `in_degree` as primary metric |
 | Orphans lens | `browse?kind=orphans` | prune candidates |
-| Tags lens | `browse?kind=tags` | `{tag,count}`; selecting one filters (see Decisions) |
+| Tags lens *(P2)* | `browse?kind=tags` | `{tag,count}`; selecting one filters (needs list-by-tag) |
 | Reading pane / drill | `read /:ns/:key` | memory + depth-1 `children[]`+`backlinks[]` w/ snippets |
 | ⌘K search | `recall?q=…` | FTS over key/content/tags; hubs promoted in ranking |
-| Prune | `DELETE` → `memory_delete` | refuses when backlinks exist unless `force=true` |
+| Prune *(P2)* | `DELETE` → `memory_delete` | refuses when backlinks exist unless `force=true` |
 
-## Prune — the one write (guarded)
+## Prune — the one write (guarded) *(P2)*
 
 The only mutation in this UI. Out of read-only-API scope as defined in the
 2026-06-05 spec, so it is an explicit, narrow addition:
@@ -175,6 +187,10 @@ The only mutation in this UI. Out of read-only-API scope as defined in the
 
 ## States & interactions
 
+**P1 carries a minimal subset** — tree lazy-load skeleton, "select a memory"
+empty reader, empty-store copy, existing 401→re-auth. The rest of the matrix
+below (delete paths, dangling wikilinks, keyboard nav, per-lens empties) is **P2**.
+
 - **Tree loading:** counts arrive first; lazy-load leaves on first open with a
   quiet skeleton.
 - **Empty store:** orient copy ("Agents haven't written anything here yet"), not
@@ -187,29 +203,30 @@ The only mutation in this UI. Out of read-only-API scope as defined in the
 - **Keyboard:** `⌘K` search; `↑↓` move tree/results, `→←` expand/collapse;
   `↵` open in pane, again to drill; `esc` collapse drill / dismiss search.
 
-## Decisions to confirm (real gaps, not yet resolved)
+## Decisions (resolved — brainstorm 2026-06-07)
 
-1. **Tag → list mechanism.** `browse?kind=tags` returns counts; the store has no
-   "list memories with tag X" and `recall` requires a query string. Options:
-   (a) extend `recall`/`browse` with a tag filter (small backend add), or
-   (b) defer the Tags lens again. The spec wants it; recommend (a).
-2. **Prune in this milestone or next?** It's the only write and adds a DELETE
-   endpoint + confirm UI. Include now (spec lists it as a core verb) or ship
-   orient+read first and add prune as a fast-follow. Recommend: build the read
-   surfaces first, land prune immediately after (same milestone, last task).
-3. **Inline wikilinks + dangling detection.** Rendering `[[…]]` inside body prose
-   (vs. only the Links/Backlinks lists) and muting unresolved ones is new client
-   parsing. Confirm it's in scope for v1 or a polish follow.
-4. **⌘K palette** is a new floating component (the only elevation). In v1 or
-   fast-follow?
+1. **Milestone = P1 "the shape"** — tree IA + four lenses + split reader + drill +
+   address-as-route + Foundations grid, pure reads. Everything below is P2.
+2. **Tags lens → P2**, kept (not cut): tags are fully modelled (table, FTS index,
+   `tagVocabulary`, `recall` tag filter) and stay visible/searchable in P1; the
+   dedicated lens lands in P2 with the **list-by-tag backend** add (`recall`
+   requires a query today, so "list all tagged X" needs a small extension).
+3. **Prune → P2.** The only write; deferred out of P1 to keep it pure-read. P2
+   adds `DELETE /api/memories/:ns/:key` + the backlink guardrail UI.
+4. **Inline/dangling wikilinks → P2.** P1 renders body as text and shows the
+   Links/Backlinks lists; parsing `[[…]]` inside prose and muting unresolved
+   ones is P2.
+5. **⌘K palette → P2.** P1 keeps the working top-bar search; the palette/keyboard
+   treatment is P2.
 
-## Phasing (proposed)
+## Phasing
 
-- **P1 — the shape:** full-viewport app shell (top bar / lens row / body split),
-  client-side namespace tree with lazy leaves, the five lenses, split reading
-  pane, address-as-route, full-page drill. Pure reads; reuses the existing API.
-- **P2 — depth:** ⌘K palette, Tags lens (pending Decision 1), prune + guardrail,
-  inline/dangling wikilinks, keyboard nav, the empty/loading/error states.
+- **P1 — the shape (this build):** full-viewport app shell (top bar with working
+  search / four-lens row / body split), client-side namespace tree with lazy
+  leaves, the four lenses, split reading pane (title = first content line),
+  address-as-route, full-page drill. Pure reads; **no server change.**
+- **P2 — depth:** ⌘K palette, Tags lens + list-by-tag backend, prune + guardrail,
+  inline/dangling wikilinks, keyboard nav, the full empty/loading/error matrix.
 
 ## Out of scope
 
@@ -218,11 +235,20 @@ namespace treemap; bulk prune. All parked per Ben's spec §10.
 
 ## Boundaries (module shape)
 
-- Reuse `session.ts` + `browse-api.ts`; add only the `DELETE` handler for prune.
-- `api.ts` gains `deleteMemory(ns,key,force)` and a typed namespace-list fetch.
-- New client units, each one purpose: **namespace-tree builder** (pure: flat
-  namespaces → folder tree), **`useBrowser` v2** (lens + tree expansion + route/
-  selection state), **`TreePane`** (disclosure + lazy leaves), **`LensRow`**,
-  **`Reader`** (split) / **`Drill`** (full-page) sharing a `read` payload,
-  **`CommandPalette`** (⌘K). The tree builder is unit-testable in isolation and
-  is where the colon-folding logic lives — keep it out of components.
+**P1** — `session.ts` + `browse-api.ts` reused **unchanged** (no server work).
+`api.ts` gains a typed namespace-list fetch (and reuses the existing `read` /
+`recall`). New client units, each one purpose:
+
+- **`namespaceTree`** — pure: flat `{namespace,count}[]` → folder tree by
+  colon-folding. The real logic; unit-tested in isolation, kept out of components.
+- **`useBrowser` v2** — lens, tree-expansion map, selected address, reader/drill
+  mode, query, route sync.
+- **`TopBar`** (wordmark · working search · account) · **`LensRow`** (four lenses
+  + running total) · **`TreePane`** (disclosure + lazy leaves; flat-list for
+  Recent/Hubs/Orphans; results for search) · **`Reader`** (split) / **`Drill`**
+  (full-page) sharing one `read` payload via a `mode` toggle.
+- Replaces today's `Facets`/`MemoryList`; `MemoryDetail` → `Reader`.
+
+**P2 adds** — a `DELETE` handler in `browse-api.ts` + `api.deleteMemory(ns,key,
+force)` (prune); the list-by-tag backend + Tags lens; a `CommandPalette` (⌘K);
+wikilink parsing in the reader.
