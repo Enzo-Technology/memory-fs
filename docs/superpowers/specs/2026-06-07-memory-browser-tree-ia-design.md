@@ -88,6 +88,8 @@ populates the left pane; it never changes the layout.** **P1 ships four lenses:*
 - **Recent** — flat list by `updated_at` desc (`browse?kind=recent`).
 - **Hubs** — by inbound link count (`browse?kind=hubs`, render `in_degree`).
 - **Orphans** — no links in or out (`browse?kind=orphans`); prune candidates.
+- **All** *(P2)* — the complete flat list of every memory (a "show me everything"
+  list view), not capped to recent/hubs/orphans. See *P2 feedback* below.
 - **Tags** *(P2)* — tag vocabulary with counts (`browse?kind=tags`); picking one
   filters the store. Needs a list-by-tag backend (see Decisions). Tags remain
   visible in the reader's tag row and full-text searchable in P1 regardless.
@@ -227,6 +229,47 @@ below (delete paths, dangling wikilinks, keyboard nav, per-lens empties) is **P2
   address-as-route, full-page drill. Pure reads; **no server change.**
 - **P2 — depth:** ⌘K palette, Tags lens + list-by-tag backend, prune + guardrail,
   inline/dangling wikilinks, keyboard nav, the full empty/loading/error matrix.
+  **Plus the P1 smoke-test feedback below** (All lens, chevron glyph fix, login
+  redesign).
+
+## P2 — feedback from the P1 smoke test (2026-06-07)
+
+Ben drove the shipped P1 build and signed off ("looks great"). Three items to
+fold into P2, in priority order:
+
+1. **"All" lens — a complete flat list view.** *(new lens; was a P1 gap.)* There
+   is no easy way to see *every* memory — Recent caps at the latest by
+   `updated_at`, Hubs/Orphans are filtered subsets, and the tree only reveals a
+   namespace's leaves once opened. Add an **All** lens that lists every memory.
+   - **Data:** the read API has no `kind=all`. Two options — (a) reuse
+     `browse?kind=recent` with a high `limit` (orders by `updated_at`, "dumbest
+     thing that works"); or (b) add a small backend ordering option so All can
+     sort **alphabetically by address** (`namespace`, then `key`) for a stable,
+     scannable list. Recommend (b) — a list of "everything" reads best
+     alphabetically, and the same backend touch can serve the Tags list-by-X
+     work. Decide at plan time; if (a), document the `updated_at` ordering and
+     the cap.
+   - **UI:** reuses the existing flat-list `MemoryRow` path in `TreePane`; lands
+     in `LensRow` as a fifth lens. No new component.
+
+2. **Disclosure chevron renders poorly.** *(polish bug, deferred to P2 per Ben.)*
+   The folder arrow is a Unicode glyph (`▸` U+25B8) at `font-size: 9px`, rotated
+   90° on open. At that size the glyph renders thin, inconsistently weighted, and
+   slightly misaligned across the rows (visible in Ben's screenshot). **Fix:**
+   replace the text glyph with a crisp **inline SVG chevron** (a single stroked
+   path, `currentColor`, ~10px) rotated via the existing `.chev--open`
+   transform — or, if avoiding SVG, a CSS border-triangle. Keep the open/closed
+   rotation and the muted→`ink-3` color shift. Purely `TreePane.tsx` +
+   `styles.css`; no logic change.
+
+3. **Login screen redesign.** *(known-ugly; deferred.)* The `/sign-in` screen is
+   a bare "memory-fs" title + a plain full-width "Continue with Google" button,
+   top-aligned on an empty canvas (it still uses the generic auth `Shell`). Give
+   it the Foundations treatment: vertically centered card, product wordmark +
+   one line of framing copy ("Shared memory for your agents" or similar — defer
+   exact copy to brand voice), a properly-sized Google button, warm-paper
+   background. Touches `SignIn.tsx` (and the auth-screen CSS); no auth-flow
+   change — purely presentational. Same pass can tidy the `…` pending state.
 
 ## Out of scope
 
