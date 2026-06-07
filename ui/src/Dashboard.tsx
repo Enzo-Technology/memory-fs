@@ -3,8 +3,9 @@ import { authClient } from "./auth";
 import { Shell } from "./Shell";
 import { Browser } from "./Browser";
 
-// The session-gated app home: the memory browser. Anything that isn't /sign-in, /sign-up, or
-// /consent lands here. Styling: .dashboard-bar.
+// The session-gated app home: the full-viewport memory browser. Anything that isn't /sign-in,
+// /sign-up, or /consent lands here — including /:namespace/:key deep links, which the browser
+// reads off the URL. The auth screens still use the centered Shell; the browser does not.
 export function Dashboard() {
   const { data: session, isPending } = authClient.useSession();
 
@@ -13,19 +14,17 @@ export function Dashboard() {
     if (!isPending && !session) location.href = "/sign-in";
   }, [isPending, session]);
 
-  if (isPending || !session) return <Shell><p>…</p></Shell>;
+  if (isPending || !session)
+    return (
+      <Shell>
+        <p>…</p>
+      </Shell>
+    );
 
   return (
-    <Shell wide>
-      <div className="dashboard-bar">
-        <span>
-          Signed in as <strong>{session.user.email}</strong>.
-        </span>
-        <button onClick={() => authClient.signOut().then(() => location.reload())}>
-          Sign out
-        </button>
-      </div>
-      <Browser />
-    </Shell>
+    <Browser
+      email={session.user.email}
+      onSignOut={() => authClient.signOut().then(() => location.reload())}
+    />
   );
 }
