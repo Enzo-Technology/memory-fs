@@ -13,6 +13,8 @@ import { openDb } from "./core/db.js";
 import { MemoryStore } from "./core/store.js";
 import { buildMcpServer } from "./lib/mcp-server.js";
 import { serveWebApp } from "./lib/auth-ui.js";
+import { makeRequireSession } from "./lib/session.js";
+import { makeBrowseApi } from "./lib/browse-api.js";
 
 
 let db;
@@ -49,6 +51,9 @@ if (httpPort) {
 
   const authHandler = toNodeHandler(auth);
   const authenticate = makeAuthenticate(BASE_URL);
+
+  // The cookie-path read API for the browser. Same store, session auth instead of bearer.
+  const browseApi = makeBrowseApi(store, makeRequireSession(auth));
 
   const httpServer = createHttpServer(async (req, res) => {
     const url = req.url ?? "/";
@@ -94,6 +99,13 @@ if (httpPort) {
         console.error("[memory-fs] transport error:", (e as Error).message);
         if (!res.headersSent) res.writeHead(500).end();
       });
+      return;
+    }
+
+    // Resource read API for the browser UI: cookie-session authenticated, read-only.
+    // Routed before the SPA catch-all so the history fallback can never swallow it.
+    if (url.startsWith("/api/memories")) {
+      await browseApi(req, res);
       return;
     }
 

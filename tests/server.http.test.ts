@@ -122,4 +122,15 @@ describe("server HTTP transport", () => {
       server.kill();
     }
   });
+
+  it("returns 401 on /api/memories without a session cookie", async () => {
+    const port = await getFreePort();
+    const server = await spawnHttpServer(port);
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/memories?kind=recent`);
+      expect(res.status).toBe(401);
+    } finally {
+      server.kill();
+    }
+  });
 });
