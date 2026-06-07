@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { runAgentLoop } from "./lib/agent-loop.mjs";
 import { buildSeedDb } from "./fixtures/seed-db.mjs";
 import { SCRIPTS } from "./scripts.mjs";
+import { makeOpenAIClient } from "./lib/openai-adapter.mjs";
 
 const NEUTRAL_SP =
   "You are an engineering assistant working with the Acme team. You have access to tools. Help the user with their requests.";
@@ -16,12 +17,24 @@ const REAL_SERVER = resolve(import.meta.dirname, "../dist/index.js");
 const ARTIFACTS = resolve(import.meta.dirname, "artifacts");
 
 // VERIFY these IDs against the API before a full run (spec §3, /claude-api).
-const MODELS = { haiku: "claude-haiku-4-5-20251001", sonnet: "claude-sonnet-4-6", opus: "claude-opus-4-8" };
+const MODELS = {
+  haiku: { provider: "anthropic", id: "claude-haiku-4-5-20251001" },
+  sonnet: { provider: "anthropic", id: "claude-sonnet-4-6" },
+  opus: { provider: "anthropic", id: "claude-opus-4-8" },
+  claude: { provider: "anthropic", id: "claude-sonnet-4-6" },
+  openai: { provider: "openai", id: "gpt-4.1" },
+};
 
-// --pilot: M+C × sonnet × P1,P2,P3b × n=5. --full: the §3 concentrated grid (fill in after pilot).
+function resolveClient(modelKey) {
+  const { provider, id } = MODELS[modelKey];
+  if (provider === "openai") return { client: makeOpenAIClient(id), id };
+  return { client: new Anthropic(), id };
+}
+
+// --pilot: M+C × claude+openai × P1,P2 × n=5. --full: the §3 concentrated grid (fill in after pilot).
 const PILOT = process.argv.includes("--pilot");
 const MATRIX = PILOT
-  ? { conditions: ["M", "C"], models: ["sonnet"], scripts: ["P1", "P2", "P3b"], n: 5 }
+  ? { conditions: ["M", "C"], models: ["claude", "openai"], scripts: ["P1", "P2"], n: 5 }
   : { conditions: ["M", "C", "K", "N", "MxC", "CxM", "PROD"], models: ["haiku", "sonnet", "opus"], scripts: ["P1", "P2", "P3b"], n: 20 };
 
 function shuffleLogged(tools) {
@@ -53,7 +66,7 @@ function resolveHistory(script, iter) {
   return { baseHistory: script.history ?? [], historySource: "history" };
 }
 
-async function runScript({ anthropic, condition, model, scriptId, iter }) {
+async function runScript({ anthropic, modelId, condition, model, scriptId, iter }) {
   const script = SCRIPTS[scriptId];
   const { baseHistory, historySource } = resolveHistory(script, iter);
   const transcripts = [];
@@ -69,9 +82,9 @@ async function runScript({ anthropic, condition, model, scriptId, iter }) {
       shared = { client, tools: shuffled, order, dbPath, messages: baseHistory.slice() };
     }
     shared.messages.push({ role: "user", content: turn.text });
-    const r = await runAgentLoop({ anthropic, mcp: shared.client, model: MODELS[model],
+    const r = await runAgentLoop({ anthropic, mcp: shared.client, model: modelId,
       system: NEUTRAL_SP, tools: shared.tools, messages: shared.messages, maxSteps: 10 });
-    // Empty assistant content would cause the next turn's Anthropic API call to reject.
+    // Empty assistant content would cause the next turn's API call to reject.
     shared.messages.push({ role: "assistant", content: r.finalText?.trim() ? r.finalText : "(no further comment)" });
     transcripts.push({ turn: turn.id, toolOrder: shared.order, historySource, ...r });
     if (turn.fresh) { await shared.client.close(); shared = null; }
@@ -81,13 +94,13 @@ async function runScript({ anthropic, condition, model, scriptId, iter }) {
 }
 
 async function main() {
-  const anthropic = new Anthropic();
   for (const condition of MATRIX.conditions)
     for (const model of MATRIX.models)
       for (const scriptId of MATRIX.scripts)
         for (let iter = 0; iter < MATRIX.n; iter++) {
+          const { client: anthropic, id: modelId } = resolveClient(model);
           let transcripts;
-          try { transcripts = await runScript({ anthropic, condition, model, scriptId, iter }); }
+          try { transcripts = await runScript({ anthropic, modelId, condition, model, scriptId, iter }); }
           catch (e) { console.error(`\n[excluded] ${condition}/${model}/${scriptId}#${iter}: ${e.message}`); continue; }
           const dir = resolve(ARTIFACTS, condition, model, scriptId);
           mkdirSync(dir, { recursive: true });
