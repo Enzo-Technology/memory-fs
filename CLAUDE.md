@@ -57,3 +57,18 @@ The last good output does not license skipping verification of the next.
 
 - Run the verification command in this turn and read its output. "Should pass" is not evidence.
 <!-- coding-discipline:end -->
+
+## Planning workflow
+
+Implementation plans and the roadmap live in a **separate private repo**, mounted here
+(git-ignored) at `.private/` — never commit `.private/` or any plan content into this repo.
+
+- Plans: `.private/plans/active/` (in flight) and `.private/plans/done/` (shipped). The
+  roadmap index is `.private/ROADMAP.md`.
+- **Before executing a plan or pointing an agent at one:** run `.private/bin/check-plans.sh`.
+  Work has shipped before without the tracker being updated — the script runs each active
+  plan's `Done-when:` predicate against this repo and flags any that are already done, plus
+  how far `main` has drifted from the plan's pinned `Base:` commit. Re-verify line numbers if
+  it reports drift.
+- **On ship:** mark the plan done in the private repo (`git mv` active→done + add its ROADMAP
+  row). Code lands here; status lives there.
