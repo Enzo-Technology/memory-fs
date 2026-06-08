@@ -114,6 +114,7 @@ export function Browser({
           />
         )}
         <Reader
+          key={vm.selected ? `${vm.selected.namespace}/${vm.selected.key}` : "none"}
           detail={vm.detail}
           detailError={vm.detailError}
           selected={!!vm.selected}
@@ -122,6 +123,9 @@ export function Browser({
           onNavigate={vm.open}
           onDrill={vm.drill}
           onShowTree={vm.showTree}
+          pendingBacklinks={vm.pendingBacklinks}
+          onDelete={vm.confirmDelete}
+          onCancelDelete={vm.cancelDelete}
         />
       </div>
     </div>
