@@ -24,9 +24,22 @@ describe("tokenize", () => {
     ]);
   });
 
-  it("uses the default namespace for a bare key (ns/key form)", () => {
+  it("uses the default namespace for a bare key, normalizing it to the stored slug", () => {
+    // No colon → default namespace; the slash is slugged to a dash, matching how the server
+    // stores the link target (normalizeKey("notes/a") === "notes-a").
     expect(tokenize("[[notes/a]]", ns)).toEqual<Token[]>([
-      { kind: "link", raw: "notes/a", namespace: ns, key: "notes/a" },
+      { kind: "link", raw: "notes/a", namespace: ns, key: "notes-a" },
+    ]);
+  });
+
+  it("normalizes the parsed address to the canonical stored form (raw preserved for display)", () => {
+    expect(tokenize("[[Project:Web Stuff/Auth Decision]]", ns)).toEqual<Token[]>([
+      {
+        kind: "link",
+        raw: "Project:Web Stuff/Auth Decision",
+        namespace: "project:web-stuff",
+        key: "auth-decision",
+      },
     ]);
   });
 

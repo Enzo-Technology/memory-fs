@@ -3,7 +3,12 @@
 // rules of src/core/wikilinks.ts (no linkifying inside ```fences```, `inline code`, or [[[triple]]]
 // escapes; ns:key / ns/key / default-namespace resolution) — but emits those skipped regions as
 // text (so the body is preserved) and does NOT dedup (every occurrence renders in place).
-// Resolvability (dangling vs navigable) is decided in Reader, not here.
+// A token's `namespace`/`key` are normalized to the canonical stored address (the same slug the
+// server applies when it records the link), so Reader's resolvability check against the read
+// payload's `children` matches even when the authored link text isn't already slugged. `raw`
+// preserves the text as written, for display. Resolvability (dangling vs navigable) is decided in
+// Reader, not here.
+import { normalizeKey, normalizeNamespace } from "../../src/core/slug";
 
 export type Token =
   | { kind: "text"; text: string }
@@ -40,10 +45,18 @@ function tokenizeRegion(
   let m: RegExpExecArray | null;
   while ((m = LINK.exec(content)) !== null && m.index < end) {
     const raw = m[1]!.trim();
-    const { namespace, key } = resolve(raw, defaultNamespace);
-    if (!namespace.trim() || !key.trim()) continue; // empty bracket → leave as text
+    const parsed = resolve(raw, defaultNamespace);
+    const namespace = parsed.namespace.trim();
+    const key = parsed.key.trim();
+    if (!namespace || !key) continue; // empty bracket → leave as text (check before normalizing)
     if (m.index > cursor) pushText(out, content.slice(cursor, m.index));
-    out.push({ kind: "link", raw, namespace: namespace.trim(), key: key.trim() });
+    // Normalize to the canonical stored address so resolvability matches `children`; keep `raw`.
+    out.push({
+      kind: "link",
+      raw,
+      namespace: normalizeNamespace(namespace),
+      key: normalizeKey(key),
+    });
     cursor = m.index + m[0].length;
   }
   if (cursor < end) pushText(out, content.slice(cursor, end));
