@@ -1,13 +1,13 @@
 // The data layer: the only place that knows endpoint URLs and that the cookie must travel
 // (credentials: "include"). Response shapes are imported (type-only) from the server's store
 // types — never re-declared here — so the only client↔server coupling is the URL strings.
-import type { BrowseResult, NamespaceItem, ReadResult } from "../../src/core/store";
+import type { BrowseResult, NamespaceItem, ReadResult, TagItem } from "../../src/core/store";
 import type { Memory } from "../../src/core/db";
 
 // The flat lenses that resolve to openable memory rows (used both as a top-level lens and, with a
 // namespace, to fetch one folder's leaves). "namespaces" is the tree and is fetched separately.
 export type FlatLens = "recent" | "hubs" | "orphans";
-export type Lens = "namespaces" | "all" | FlatLens;
+export type Lens = "namespaces" | "all" | "tags" | FlatLens;
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(path, { credentials: "include" });
@@ -52,4 +52,18 @@ export function readMemory(namespace: string, key: string): Promise<ReadResult> 
   return get<ReadResult>(
     `/api/memories/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`,
   );
+}
+
+// The tag vocabulary for the Tags lens: {tag, count}, picked from to drill into a tag's memories.
+// Raised past the store default so the lens shows every tag.
+export async function listTags(): Promise<TagItem[]> {
+  const b = await get<BrowseResult>(`/api/memories?kind=tags&limit=1000`);
+  if (b.kind !== "tags") throw new Error("expected tags result");
+  return b.items;
+}
+
+// The memories carrying one tag (the Tags-lens drill-in). Records, so they render as flat rows.
+export function listTagged(tag: string): Promise<BrowseResult> {
+  const p = new URLSearchParams({ kind: "tagged", tag, limit: "100" });
+  return get<BrowseResult>(`/api/memories?${p.toString()}`);
 }
