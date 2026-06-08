@@ -6,12 +6,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   listMemories,
   listNamespaces,
+  listTagged,
+  listTags,
   readMemory,
   recall,
   type FlatLens,
   type Lens,
 } from "./api";
-import type { BrowseResult, ReadResult } from "../../src/core/store";
+import type { BrowseResult, ReadResult, TagItem } from "../../src/core/store";
 import type { MemoryType } from "../../src/core/db";
 import { buildTree, type TreeNode } from "./namespaceTree";
 import { addressToPath, parseAddress } from "./route";
@@ -34,13 +36,16 @@ export interface BrowserView {
   tree: TreeNode[] | null; // null while the namespace vocabulary loads
   expanded: Set<string>; // namespaces of open folders/leaf-folders
   leaves: Record<string, Row[]>; // resolved folder contents, keyed by namespace
-  flat: Row[] | null; // Recent/Hubs/Orphans list; null while loading
+  flat: Row[] | null; // Recent/Hubs/Orphans/Tagged list; null while loading
   results: Row[] | null; // search results; non-null only while a query is active
+  tags: TagItem[] | null; // Tags-lens vocabulary; null while loading / off-lens
+  selectedTag: string | null; // drilled-into tag, or null = show vocabulary
   detail: ReadResult | null;
   selected: { namespace: string; key: string } | null;
   mode: Mode;
   totals: { memories: number; namespaces: number };
   selectLens: (l: Lens) => void;
+  selectTag: (tag: string | null) => void;
   setQuery: (q: string) => void;
   toggleFolder: (node: TreeNode) => void;
   expandAll: () => void;
@@ -65,7 +70,7 @@ function firstLine(content: string): string {
 
 // Map a flat browse result to openable rows. Hubs carry in_degree as the metric.
 function toRows(b: BrowseResult): Row[] {
-  if (b.kind === "recent" || b.kind === "orphans") {
+  if (b.kind === "recent" || b.kind === "orphans" || b.kind === "tagged") {
     return b.items.map((m) => ({
       namespace: m.namespace,
       key: m.key,
@@ -106,6 +111,8 @@ export function useBrowser(): BrowserView {
   const [leaves, setLeaves] = useState<Record<string, Row[]>>({});
   const [flat, setFlat] = useState<Row[] | null>(null);
   const [results, setResults] = useState<Row[] | null>(null);
+  const [tags, setTags] = useState<TagItem[] | null>(null);
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [selected, setSelected] = useState<{ namespace: string; key: string } | null>(
     () => parseAddress(location.pathname),
   );
@@ -157,26 +164,29 @@ export function useBrowser(): BrowserView {
     };
   }, []);
 
-  // 2. Flat lens list. Skipped for the tree lens and while searching. "all" reuses the recent
-  //    endpoint at a high limit and sorts client-side by address — a complete, stably-ordered
-  //    list with no backend change (fine at team scale; see plan note on the cap).
+  // 2. Flat lens list. Skipped for the tree lens, the tags vocabulary, and while searching.
+  //    "all" reuses the recent endpoint at a high limit and sorts client-side by address — a
+  //    complete, stably-ordered list with no backend change (fine at team scale; see plan note on
+  //    the cap). When a tag is selected the tags lens hands off here via listTagged.
   useEffect(() => {
-    if (query.trim() || lens === "namespaces") {
+    if (query.trim() || lens === "namespaces" || (lens === "tags" && !selectedTag)) {
       setFlat(null);
       return;
     }
     let live = true;
     setFlat(null);
     const load =
-      lens === "all"
-        ? listMemories("recent", undefined, 1000).then((b) => ({
-            rows: sortByAddress(toRows(b)),
-            total: b.total,
-          }))
-        : listMemories(lens as FlatLens).then((b) => ({
-            rows: toRows(b),
-            total: b.total,
-          }));
+      lens === "tags"
+        ? listTagged(selectedTag!).then((b) => ({ rows: toRows(b), total: b.total }))
+        : lens === "all"
+          ? listMemories("recent", undefined, 1000).then((b) => ({
+              rows: sortByAddress(toRows(b)),
+              total: b.total,
+            }))
+          : listMemories(lens as FlatLens).then((b) => ({
+              rows: toRows(b),
+              total: b.total,
+            }));
     load.then(({ rows, total }) => {
       if (!live) return;
       setFlat(rows);
@@ -185,7 +195,24 @@ export function useBrowser(): BrowserView {
     return () => {
       live = false;
     };
-  }, [lens, query]);
+  }, [lens, query, selectedTag]);
+
+  // 2b. Tags-lens vocabulary — fetched when the Tags lens is active and no tag is drilled into.
+  //     Skipped while searching. Picking a tag hands off to the flat effect above (listTagged).
+  useEffect(() => {
+    if (lens !== "tags" || selectedTag || query.trim()) {
+      setTags(null);
+      return;
+    }
+    let live = true;
+    setTags(null);
+    listTags().then((items) => {
+      if (live) setTags(items);
+    });
+    return () => {
+      live = false;
+    };
+  }, [lens, selectedTag, query]);
 
   // 3. Search — a non-empty query populates the results list via recall.
   useEffect(() => {
@@ -324,8 +351,11 @@ export function useBrowser(): BrowserView {
 
   const selectLens = useCallback((l: Lens) => {
     setQuery("");
+    setSelectedTag(null);
     setLens(l);
   }, []);
+
+  const selectTag = useCallback((tag: string | null) => setSelectedTag(tag), []);
 
   return {
     lens,
@@ -335,11 +365,14 @@ export function useBrowser(): BrowserView {
     leaves,
     flat,
     results,
+    tags,
+    selectedTag,
     detail,
     selected,
     mode,
     totals,
     selectLens,
+    selectTag,
     setQuery,
     toggleFolder,
     expandAll,
