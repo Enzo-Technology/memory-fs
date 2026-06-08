@@ -137,7 +137,20 @@ function FolderRow({
   return (
     <>
       <button className="trow trow--folder" style={indent} onClick={() => onToggle(node)}>
-        <span className={isOpen ? "chev chev--open" : "chev"}>{expandable ? "▸" : ""}</span>
+        <span className={isOpen ? "chev chev--open" : "chev"}>
+          {expandable && (
+            <svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true">
+              <path
+                d="M4.5 2.5 L8 6 L4.5 9.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          )}
+        </span>
         <span className="trow__name">{node.name}</span>
         <span className="trow__count">{node.total}</span>
       </button>

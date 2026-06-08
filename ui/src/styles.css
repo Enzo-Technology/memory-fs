@@ -257,9 +257,12 @@ body,
 }
 .chev {
   width: 12px;
+  height: 12px;
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--ink-4);
-  font-size: 9px;
   transition: transform 0.12s ease;
 }
 .chev--open {
