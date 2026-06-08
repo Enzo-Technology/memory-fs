@@ -172,4 +172,16 @@ describe("browse-api delete", () => {
     );
     expect(out.status).toBe(404);
   });
+
+  it("500 (not a hung connection) when the store throws unexpectedly on delete", async () => {
+    // A store double whose del() throws — the one write path must fail with a response, not hang.
+    const throwing = {
+      backlinks: () => [],
+      del: () => {
+        throw new Error("boom");
+      },
+    } as never;
+    const out = await call(throwing, withSession, "/api/memories/ns/x?force=true", "DELETE");
+    expect(out.status).toBe(500);
+  });
 });

@@ -48,15 +48,23 @@ export function makeBrowseApi(store: MemoryStore, requireSession: RequireSession
       const namespace = decodeURIComponent(m[1]!);
       const key = decodeURIComponent(m[2]!);
       const force = q.get("force") === "true";
-      if (!force) {
-        const bl = store.backlinks(namespace, key);
-        if (bl.length > 0) {
-          return json(res, 409, { error: "has backlinks", backlinks: bl });
+      // The one write path: wrap it so an unexpected store throw (e.g. the backlink-guard
+      // backstop firing on a future divergence) returns 500 instead of hanging the connection.
+      try {
+        if (!force) {
+          const bl = store.backlinks(namespace, key);
+          if (bl.length > 0) {
+            return json(res, 409, { error: "has backlinks", backlinks: bl });
+          }
         }
+        const ok = store.del(namespace, key, force);
+        if (!ok) return json(res, 404, { error: "not found" });
+        return json(res, 200, { ok: true });
+      } catch (err) {
+        return json(res, 500, {
+          error: err instanceof Error ? err.message : "delete failed",
+        });
       }
-      const ok = store.del(namespace, key, force);
-      if (!ok) return json(res, 404, { error: "not found" });
-      return json(res, 200, { ok: true });
     }
 
     // GET /api/memories/recall — full-text search. Checked before the detail pattern below;
