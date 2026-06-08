@@ -52,12 +52,20 @@ let MATRIX = PILOT_OPENAI
   ? { conditions: ["M", "C"], models: ["sonnet"], scripts: ["P1", "P2", "P3b"], n: 5 }
   : { conditions: ["M", "C", "K", "N", "MxC", "CxM", "PROD"], models: ["haiku", "sonnet", "opus"], scripts: ["P1", "P2", "P3b"], n: 20 };
 
-const argVal = (k) => { const a = process.argv.find(x => x.startsWith(k + "=")); return a ? a.split("=")[1] : null; };
-const condOverride = argVal("--conditions");
-const scriptOverride = argVal("--scripts");
-if (condOverride) MATRIX.conditions = condOverride.split(",");
-if (scriptOverride) MATRIX.scripts = scriptOverride.split(",");
+// Matrix overrides from argv, e.g. --conditions=M,C --models=sonnet --scripts=P1 --n=1
+// Exported so it can be unit-tested without executing the experiment (see run-overrides.test.ts).
+export function applyOverrides(matrix, argv) {
+  const val = (k) => { const a = argv.find((x) => x.startsWith(k + "=")); return a ? a.split("=")[1] : null; };
+  const out = { ...matrix };
+  const c = val("--conditions"); if (c) out.conditions = c.split(",");
+  const s = val("--scripts"); if (s) out.scripts = s.split(",");
+  const m = val("--models"); if (m) out.models = m.split(",");
+  const n = val("--n"); if (n) out.n = Number.parseInt(n, 10);
+  return out;
+}
+MATRIX = applyOverrides(MATRIX, process.argv);
 const TERSE = process.argv.includes("--terse");
+const PRINT = process.argv.includes("--print"); // dump each cell's trace to stdout (1-off eyeballing)
 
 function shuffleLogged(tools) {
   const order = tools.map((_, i) => i);
@@ -131,7 +139,16 @@ async function main() {
           writeFileSync(resolve(dir, `${iter}.json`),
             JSON.stringify({ condition, model: modelLabel, scriptId, iter, transcripts }, null, 2));
           process.stdout.write(".");
+          if (PRINT) {
+            for (const t of transcripts) {
+              console.log(`\n[${condition}/${modelLabel}/${scriptId}#${iter}] ${t.turn}`);
+              for (const c of (t.toolCalls ?? [])) console.log(`  → ${c.name} ${JSON.stringify(c.input).slice(0, 160)}`);
+              console.log(`  answer: ${(t.finalText ?? "").slice(0, 200)}`);
+            }
+          }
         }
   process.stdout.write("\ndone\n");
 }
-main().catch((e) => { console.error(e); process.exit(1); });
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((e) => { console.error(e); process.exit(1); });
+}
