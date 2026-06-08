@@ -125,6 +125,8 @@ export function useBrowser(): BrowserView {
   const [selected, setSelected] = useState<{ namespace: string; key: string } | null>(
     () => parseAddress(location.pathname),
   );
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
   const [detail, setDetail] = useState<ReadResult | null>(null);
   const [detailError, setDetailError] = useState(false);
   const [mode, setMode] = useState<Mode>("split");
@@ -404,10 +406,15 @@ export function useBrowser(): BrowserView {
         });
         setTotals((t) => ({ ...t, memories: Math.max(0, t.memories - 1) }));
         setPendingBacklinks(null);
-        setDetail(null);
-        setSelected(null);
-        setMode("split");
-        history.pushState(null, "", "/");
+        // Only tear down the reader if we're still looking at the memory we deleted — the user
+        // may have selected another memory while the delete was in flight.
+        const cur = selectedRef.current;
+        if (cur && cur.namespace === namespace && cur.key === key) {
+          setDetail(null);
+          setSelected(null);
+          setMode("split");
+          history.pushState(null, "", "/");
+        }
       });
     },
     [selected],
