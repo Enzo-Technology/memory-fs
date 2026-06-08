@@ -4,6 +4,7 @@
 // deep module; the panes are thin over it.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  deleteMemory,
   listMemories,
   listNamespaces,
   listTagged,
@@ -13,7 +14,7 @@ import {
   type FlatLens,
   type Lens,
 } from "./api";
-import type { BrowseResult, ReadResult, TagItem } from "../../src/core/store";
+import type { Backlink, BrowseResult, ReadResult, TagItem } from "../../src/core/store";
 import type { MemoryType } from "../../src/core/db";
 import { buildTree, type TreeNode } from "./namespaceTree";
 import { addressToPath, parseAddress } from "./route";
@@ -52,6 +53,9 @@ export interface BrowserView {
   open: (namespace: string, key: string) => void;
   drill: () => void;
   showTree: () => void;
+  pendingBacklinks: Backlink[] | null; // non-null → guardrail panel shown for `selected`
+  confirmDelete: (force: boolean) => void; // run the delete; force skips the guardrail
+  cancelDelete: () => void; // dismiss the guardrail panel
   paletteOpen: boolean;
   openPalette: () => void;
   closePalette: () => void;
@@ -118,6 +122,7 @@ export function useBrowser(): BrowserView {
   );
   const [detail, setDetail] = useState<ReadResult | null>(null);
   const [mode, setMode] = useState<Mode>("split");
+  const [pendingBacklinks, setPendingBacklinks] = useState<Backlink[] | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [cursor, setCursor] = useState(0);
   const [totals, setTotals] = useState({ memories: 0, namespaces: 0 });
@@ -240,6 +245,7 @@ export function useBrowser(): BrowserView {
 
   // 4. Detail for the selected address.
   useEffect(() => {
+    setPendingBacklinks(null);
     if (!selected) {
       setDetail(null);
       return;
@@ -349,6 +355,40 @@ export function useBrowser(): BrowserView {
     history.pushState(null, "", addressToPath(namespace, key));
   }, []);
 
+  const confirmDelete = useCallback(
+    (force: boolean) => {
+      if (!selected) return;
+      const { namespace, key } = selected;
+      deleteMemory(namespace, key, force).then((r) => {
+        if ("conflict" in r) {
+          setPendingBacklinks(r.backlinks);
+          return;
+        }
+        // Gone: drop it from every cached list and the running total, then deselect.
+        const drop = (rows: Row[] | null) =>
+          rows
+            ? rows.filter((x) => !(x.namespace === namespace && x.key === key))
+            : rows;
+        setFlat(drop);
+        setResults(drop);
+        setLeaves((c) => {
+          const cur = c[namespace];
+          if (!cur) return c;
+          return { ...c, [namespace]: cur.filter((x) => x.key !== key) };
+        });
+        setTotals((t) => ({ ...t, memories: Math.max(0, t.memories - 1) }));
+        setPendingBacklinks(null);
+        setDetail(null);
+        setSelected(null);
+        setMode("split");
+        history.pushState(null, "", "/");
+      });
+    },
+    [selected],
+  );
+
+  const cancelDelete = useCallback(() => setPendingBacklinks(null), []);
+
   const selectLens = useCallback((l: Lens) => {
     setQuery("");
     setSelectedTag(null);
@@ -379,6 +419,9 @@ export function useBrowser(): BrowserView {
     open,
     drill: useCallback(() => setMode("drill"), []),
     showTree: useCallback(() => setMode("split"), []),
+    pendingBacklinks,
+    confirmDelete,
+    cancelDelete,
     paletteOpen,
     openPalette: useCallback(() => setPaletteOpen(true), []),
     closePalette: useCallback(() => setPaletteOpen(false), []),
