@@ -32,10 +32,15 @@ const withSession = () =>
   Promise.resolve({ session: { id: "s" }, user: { id: "u" } } as never);
 const noSession = () => Promise.resolve(null as never);
 
-function call(store: MemoryStore, guard: () => Promise<never>, url: string) {
+function call(
+  store: MemoryStore,
+  guard: () => Promise<never>,
+  url: string,
+  method = "GET",
+) {
   const api = makeBrowseApi(store, guard);
   const res = fakeRes();
-  return api({ url } as never, res as never).then(() => res.out);
+  return api({ url, method } as never, res as never).then(() => res.out);
 }
 
 describe("browse-api", () => {
@@ -85,6 +90,60 @@ describe("browse-api", () => {
 
   it("404 on unknown memory", async () => {
     const out = await call(freshStore(), withSession, "/api/memories/ns/missing");
+    expect(out.status).toBe(404);
+  });
+});
+
+describe("browse-api delete", () => {
+  it("401 when there is no session", async () => {
+    const out = await call(freshStore(), noSession, "/api/memories/ns/a", "DELETE");
+    expect(out.status).toBe(401);
+  });
+
+  it("409 with a backlinks list when inbound links exist and not forced", async () => {
+    const store = freshStore();
+    store.note({ namespace: "ns", key: "target", content: "x" });
+    store.note({ namespace: "ns", key: "src", content: "see [[target]]" });
+    const out = await call(store, withSession, "/api/memories/ns/target", "DELETE");
+    expect(out.status).toBe(409);
+    const body = JSON.parse(out.body!);
+    expect(body.error).toBe("has backlinks");
+    expect(body.backlinks[0].from_key).toBe("src");
+    // still present
+    expect(store.read("ns", "target")).not.toBeNull();
+  });
+
+  it("force=true deletes despite backlinks and the memory is gone", async () => {
+    const store = freshStore();
+    store.note({ namespace: "ns", key: "target", content: "x" });
+    store.note({ namespace: "ns", key: "src", content: "see [[target]]" });
+    const out = await call(
+      store,
+      withSession,
+      "/api/memories/ns/target?force=true",
+      "DELETE",
+    );
+    expect(out.status).toBe(200);
+    expect(JSON.parse(out.body!).ok).toBe(true);
+    expect(store.read("ns", "target")).toBeNull();
+  });
+
+  it("deletes a memory with no backlinks and it is gone", async () => {
+    const store = freshStore();
+    store.note({ namespace: "ns", key: "lone", content: "x" });
+    const out = await call(store, withSession, "/api/memories/ns/lone", "DELETE");
+    expect(out.status).toBe(200);
+    expect(JSON.parse(out.body!).ok).toBe(true);
+    expect(store.read("ns", "lone")).toBeNull();
+  });
+
+  it("404 deleting a memory that does not exist", async () => {
+    const out = await call(
+      freshStore(),
+      withSession,
+      "/api/memories/ns/missing",
+      "DELETE",
+    );
     expect(out.status).toBe(404);
   });
 });
