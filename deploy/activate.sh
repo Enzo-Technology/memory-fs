@@ -29,7 +29,7 @@ BASE="${BASE:-/opt/memory-fs}"
 KEEP_RELEASES="${KEEP_RELEASES:-5}"
 SERVICE="memory-fs"
 ENV_FILE="/etc/memory-fs/env"
-HEALTH_TIMEOUT=30   # seconds to wait for /health 200
+HEALTH_TIMEOUT=60   # seconds to wait for /health 200 (allows for boot-time DB migrations)
 HEALTH_INTERVAL=2   # seconds between polls
 
 # ---------------------------------------------------------------------------
@@ -68,6 +68,14 @@ mkdir -p "$TMP_DIR"
 tar -xzf "$TARBALL" -C "$TMP_DIR" --strip-components=0
 rm -rf "$RELEASE_DIR"
 mv "$TMP_DIR" "$RELEASE_DIR"
+
+# The service runs as an unprivileged user (memoryfs) but releases are root-owned
+# (this script runs under sudo). Make the tree world-readable/traversable so the
+# service user can read current/dist/index.js — otherwise ExecStart fails EACCES
+# and every deploy silently fails the health gate. a+rX = read on files, traverse
+# on dirs, without flipping the execute bit on regular files.
+chown -R root:root "$RELEASE_DIR"
+chmod -R a+rX "$RELEASE_DIR"
 
 # ---------------------------------------------------------------------------
 # 4. Atomic symlink flip
