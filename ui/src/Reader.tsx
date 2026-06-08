@@ -2,7 +2,8 @@
 // sharing the single `read` payload (memory + depth-1 children/backlinks with snippets — no extra
 // fetch). Title is the first content line (never invented). In drill, neighbours gain snippets.
 // Props only. Styling: .reader.
-import type { ReadResult } from "../../src/core/store";
+import { useState } from "react";
+import type { Backlink, ReadResult } from "../../src/core/store";
 import type { Mode } from "./useBrowser";
 import { TYPE_COLOR } from "./memoryType";
 import { tokenize, type Token } from "./wikilinkText";
@@ -20,6 +21,9 @@ export function Reader({
   onNavigate,
   onDrill,
   onShowTree,
+  pendingBacklinks,
+  onDelete,
+  onCancelDelete,
 }: {
   detail: ReadResult | null;
   mode: Mode;
@@ -29,7 +33,11 @@ export function Reader({
   onNavigate: (namespace: string, key: string) => void;
   onDrill: () => void;
   onShowTree: () => void;
+  pendingBacklinks: Backlink[] | null;
+  onDelete: (force: boolean) => void;
+  onCancelDelete: () => void;
 }) {
+  const [confirming, setConfirming] = useState(false);
   if (!detail) {
     // Three empty-ish states: a failed read, a memory still loading, or nothing selected.
     const message = detailError
@@ -46,6 +54,7 @@ export function Reader({
   const color = TYPE_COLOR[detail.type];
   const title = firstLine(detail.content) || detail.key;
   const drilled = mode === "drill";
+  const guarded = pendingBacklinks !== null;
   return (
     <section className={drilled ? "reader reader--drill" : "reader"}>
       <div className="reader__bar">
@@ -54,17 +63,77 @@ export function Reader({
           <span className="addr__sep">/</span>
           <span className="addr__key">{detail.key}</span>
         </span>
-        {drilled ? (
-          <button className="reader__toggle" onClick={onShowTree}>
-            show tree
-          </button>
-        ) : (
-          <button className="reader__toggle" onClick={onDrill}>
-            focus
-          </button>
-        )}
+        <div className="reader__actions">
+          {drilled ? (
+            <button className="reader__toggle" onClick={onShowTree}>
+              show tree
+            </button>
+          ) : (
+            <button className="reader__toggle" onClick={onDrill}>
+              focus
+            </button>
+          )}
+          {confirming ? (
+            <span className="reader__confirm">
+              Delete this memory?
+              <button
+                className="reader__delete reader__delete--go"
+                onClick={() => {
+                  setConfirming(false);
+                  onDelete(false);
+                }}
+              >
+                Delete
+              </button>
+              <button className="reader__cancel" onClick={() => setConfirming(false)}>
+                Cancel
+              </button>
+            </span>
+          ) : (
+            <button
+              className="reader__delete"
+              onClick={() => {
+                onCancelDelete();
+                setConfirming(true);
+              }}
+            >
+              Delete
+            </button>
+          )}
+        </div>
       </div>
       <article className="reader__doc">
+        {guarded && (
+          <div className="guardrail">
+            <p className="guardrail__lead">
+              {pendingBacklinks!.length}{" "}
+              {pendingBacklinks!.length === 1 ? "memory links" : "memories link"} here —
+              deleting may break {pendingBacklinks!.length === 1 ? "it" : "them"}.
+            </p>
+            <div className="guardrail__list">
+              {pendingBacklinks!.map((b) => (
+                <button
+                  key={`${b.from_namespace}/${b.from_key}`}
+                  className="guardrail__link"
+                  onClick={() => onNavigate(b.from_namespace, b.from_key)}
+                >
+                  {b.from_namespace}/{b.from_key}
+                </button>
+              ))}
+            </div>
+            <div className="guardrail__actions">
+              <button
+                className="reader__delete reader__delete--go"
+                onClick={() => onDelete(true)}
+              >
+                Delete anyway
+              </button>
+              <button className="reader__cancel" onClick={onCancelDelete}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
         <span className="chip" style={{ color: color.fg, background: color.bg }}>
           <span className="cdot" style={{ background: color.fg }} />
           {detail.type}
