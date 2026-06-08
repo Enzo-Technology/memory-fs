@@ -38,6 +38,26 @@ export function makeBrowseApi(store: MemoryStore, requireSession: RequireSession
     const path = url.pathname;
     const q = url.searchParams;
 
+    // DELETE /api/memories/:namespace/:key — the one write. Session-gated above. The store
+    // refuses when inbound backlinks exist unless force=true; we pre-check so we can return
+    // the linking records (409) for the UI's guardrail instead of an opaque throw.
+    if (req.method === "DELETE") {
+      const m = path.match(/^\/api\/memories\/([^/]+)\/([^/]+)$/);
+      if (!m) return json(res, 404, { error: "not found" });
+      const namespace = decodeURIComponent(m[1]!);
+      const key = decodeURIComponent(m[2]!);
+      const force = q.get("force") === "true";
+      if (!force) {
+        const bl = store.backlinks(namespace, key);
+        if (bl.length > 0) {
+          return json(res, 409, { error: "has backlinks", backlinks: bl });
+        }
+      }
+      const ok = store.del(namespace, key, force);
+      if (!ok) return json(res, 404, { error: "not found" });
+      return json(res, 200, { ok: true });
+    }
+
     // GET /api/memories/recall — full-text search. Checked before the detail pattern below;
     // they cannot collide (recall has one path segment, detail requires two).
     if (path === "/api/memories/recall") {
