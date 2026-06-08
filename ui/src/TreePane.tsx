@@ -1,19 +1,22 @@
-// The left pane. Three render modes, chosen by state: search results > flat lens list > the
-// namespace tree. Finder-style disclosure (multiple branches open at once); leaf-folder contents
-// lazy-load with a quiet skeleton. Leaves show a type dot only (per-leaf backlink count is P2 —
-// the recent payload carries no degree and P1 adds no backend). Props only.
-// Styling: .tree / .trow / .mrow.
+// The left pane. Four render modes, chosen by state: search results > tags: vocabulary, or back
+// row + a tag's memories > flat lens list > the namespace tree. Finder-style disclosure (multiple
+// branches open at once); leaf-folder contents lazy-load with a quiet skeleton. Leaves show a
+// type dot only (per-leaf backlink count is P2 — the recent payload carries no degree and P1 adds
+// no backend). Props only.
+// Styling: .tree / .trow / .mrow / .tagrow.
 import { useEffect, useRef } from "react";
 import type { Lens } from "./api";
 import type { TreeNode } from "./namespaceTree";
 import type { Row } from "./useBrowser";
+import type { TagItem } from "../../src/core/store";
 import { TYPE_COLOR } from "./memoryType";
 
 type Selected = { namespace: string; key: string } | null;
 
-function paneTitle(lens: Lens, query: string): string {
+function paneTitle(lens: Lens, query: string, selectedTag: string | null): string {
   if (query.trim()) return "Results";
-  return { namespaces: "Namespaces", all: "All", recent: "Recent", hubs: "Hubs", orphans: "Orphans" }[lens];
+  if (lens === "tags") return selectedTag ? `#${selectedTag}` : "Tags";
+  return { namespaces: "Namespaces", all: "All", recent: "Recent", hubs: "Hubs", orphans: "Orphans", tags: "Tags" }[lens];
 }
 
 function emptyLensMessage(lens: Lens): string {
@@ -32,9 +35,13 @@ export function TreePane({
   results,
   selected,
   cursorAddress,
+  tags,
+  selectedTag,
   onToggle,
   onOpen,
   onExpandAll,
+  onSelectTag,
+  onClearTag,
 }: {
   lens: Lens;
   query: string;
@@ -45,14 +52,18 @@ export function TreePane({
   results: Row[] | null;
   selected: Selected;
   cursorAddress: Selected;
+  tags: TagItem[] | null;
+  selectedTag: string | null;
   onToggle: (node: TreeNode) => void;
   onOpen: (namespace: string, key: string) => void;
   onExpandAll: () => void;
+  onSelectTag: (tag: string) => void;
+  onClearTag: () => void;
 }) {
   return (
     <aside className="tree">
       <div className="tree__header">
-        <span className="tree__title">{paneTitle(lens, query)}</span>
+        <span className="tree__title">{paneTitle(lens, query, selectedTag)}</span>
         {lens === "namespaces" && !query.trim() && (
           <button className="tree__expand" onClick={onExpandAll}>
             expand all
@@ -60,7 +71,7 @@ export function TreePane({
         )}
       </div>
       <div className="tree__body">
-        {renderBody({ lens, query, tree, expanded, leaves, flat, results, selected, cursorAddress, onToggle, onOpen })}
+        {renderBody({ lens, query, tree, expanded, leaves, flat, results, selected, cursorAddress, tags, selectedTag, onToggle, onOpen, onSelectTag, onClearTag })}
       </div>
     </aside>
   );
@@ -76,8 +87,12 @@ function renderBody(p: {
   results: Row[] | null;
   selected: Selected;
   cursorAddress: Selected;
+  tags: TagItem[] | null;
+  selectedTag: string | null;
   onToggle: (node: TreeNode) => void;
   onOpen: (namespace: string, key: string) => void;
+  onSelectTag: (tag: string) => void;
+  onClearTag: () => void;
 }) {
   // Search results take precedence whenever a query is active.
   if (p.query.trim()) {
@@ -107,6 +122,46 @@ function renderBody(p: {
         onOpen={p.onOpen}
       />
     ));
+  }
+
+  // The Tags lens: vocabulary first; once a tag is picked, a back row then its memories (flat).
+  if (p.lens === "tags") {
+    if (!p.selectedTag) {
+      if (!p.tags) return <div className="tree__skeleton">…</div>;
+      if (p.tags.length === 0)
+        return <p className="tree__empty">No tags yet.</p>;
+      return p.tags.map((t) => (
+        <button
+          key={t.tag}
+          className="tagrow"
+          onClick={() => p.onSelectTag(t.tag)}
+        >
+          <span className="tagrow__name">#{t.tag}</span>
+          <span className="tagrow__count">{t.count}</span>
+        </button>
+      ));
+    }
+    if (!p.flat) return <div className="tree__skeleton">…</div>;
+    return (
+      <>
+        <button className="tagrow tagrow--back" onClick={p.onClearTag}>
+          ← all tags
+        </button>
+        {p.flat.length === 0 ? (
+          <p className="tree__empty">Nothing tagged #{p.selectedTag}.</p>
+        ) : (
+          p.flat.map((r) => (
+            <MemoryRow
+              key={`${r.namespace}/${r.key}`}
+              row={r}
+              selected={p.selected}
+              cursor={p.cursorAddress}
+              onOpen={p.onOpen}
+            />
+          ))
+        )}
+      </>
+    );
   }
 
   // A flat lens (Recent / Hubs / Orphans).
