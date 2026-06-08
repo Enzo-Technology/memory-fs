@@ -12,3 +12,5 @@ eval/results/*.json
 eval/results/SUMMARY.*
 eval/artifacts/
 eval/artifacts-mcpjam/
+# Private ops/planning repo (memory-fs-ops), symlinked for dev convenience — never committed
+/.private

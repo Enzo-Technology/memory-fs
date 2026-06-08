@@ -128,7 +128,7 @@ Verify with `curl -s http://127.0.0.1:$PORT/health` before declaring done.
 
 ## Rollback and operations
 
-**Automatic rollback:** if `activate.sh`'s health gate doesn't get a `200` from `/health` within 30 s, it repoints `current` back to the previous release and restarts the service. The deploy exits nonzero and the CI job is marked failed.
+**Automatic rollback:** if `activate.sh`'s health gate doesn't get a `200` from `/health` within 60 s, it repoints `current` back to the previous release and restarts the service. The deploy exits nonzero and the CI job is marked failed.
 
 **Manual rollback:**
 
