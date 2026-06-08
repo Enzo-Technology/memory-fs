@@ -3,6 +3,7 @@
 // lazy-load with a quiet skeleton. Leaves show a type dot only (per-leaf backlink count is P2 —
 // the recent payload carries no degree and P1 adds no backend). Props only.
 // Styling: .tree / .trow / .mrow.
+import { useEffect, useRef } from "react";
 import type { Lens } from "./api";
 import type { TreeNode } from "./namespaceTree";
 import type { Row } from "./useBrowser";
@@ -30,6 +31,7 @@ export function TreePane({
   flat,
   results,
   selected,
+  cursorAddress,
   onToggle,
   onOpen,
   onExpandAll,
@@ -42,6 +44,7 @@ export function TreePane({
   flat: Row[] | null;
   results: Row[] | null;
   selected: Selected;
+  cursorAddress: Selected;
   onToggle: (node: TreeNode) => void;
   onOpen: (namespace: string, key: string) => void;
   onExpandAll: () => void;
@@ -57,7 +60,7 @@ export function TreePane({
         )}
       </div>
       <div className="tree__body">
-        {renderBody({ lens, query, tree, expanded, leaves, flat, results, selected, onToggle, onOpen })}
+        {renderBody({ lens, query, tree, expanded, leaves, flat, results, selected, cursorAddress, onToggle, onOpen })}
       </div>
     </aside>
   );
@@ -72,6 +75,7 @@ function renderBody(p: {
   flat: Row[] | null;
   results: Row[] | null;
   selected: Selected;
+  cursorAddress: Selected;
   onToggle: (node: TreeNode) => void;
   onOpen: (namespace: string, key: string) => void;
 }) {
@@ -81,7 +85,7 @@ function renderBody(p: {
     if (p.results.length === 0)
       return <p className="tree__empty">No matches. Try a broader term.</p>;
     return p.results.map((r) => (
-      <MemoryRow key={`${r.namespace}/${r.key}`} row={r} selected={p.selected} onOpen={p.onOpen} />
+      <MemoryRow key={`${r.namespace}/${r.key}`} row={r} selected={p.selected} cursor={p.cursorAddress} onOpen={p.onOpen} />
     ));
   }
 
@@ -98,6 +102,7 @@ function renderBody(p: {
         expanded={p.expanded}
         leaves={p.leaves}
         selected={p.selected}
+        cursor={p.cursorAddress}
         onToggle={p.onToggle}
         onOpen={p.onOpen}
       />
@@ -108,7 +113,7 @@ function renderBody(p: {
   if (!p.flat) return <div className="tree__skeleton">…</div>;
   if (p.flat.length === 0) return <p className="tree__empty">{emptyLensMessage(p.lens)}</p>;
   return p.flat.map((r) => (
-    <MemoryRow key={`${r.namespace}/${r.key}`} row={r} selected={p.selected} onOpen={p.onOpen} />
+    <MemoryRow key={`${r.namespace}/${r.key}`} row={r} selected={p.selected} cursor={p.cursorAddress} onOpen={p.onOpen} />
   ));
 }
 
@@ -119,6 +124,7 @@ function FolderRow({
   expanded,
   leaves,
   selected,
+  cursor,
   onToggle,
   onOpen,
 }: {
@@ -127,6 +133,7 @@ function FolderRow({
   expanded: Set<string>;
   leaves: Record<string, Row[]>;
   selected: Selected;
+  cursor: Selected;
   onToggle: (node: TreeNode) => void;
   onOpen: (namespace: string, key: string) => void;
 }) {
@@ -134,9 +141,19 @@ function FolderRow({
   const expandable = node.children.length > 0 || node.count > 0;
   const indent = { paddingLeft: 8 + depth * 20 };
   const childIndent = { paddingLeft: 8 + (depth + 1) * 20 };
+  // The folder cursor highlight: a folder is cursored when cursorAddress is null AND this folder's
+  // namespace matches — but cursorAddress carries only leaf addresses, so folders use a ref+effect
+  // keyed on a data attribute instead. Simpler: compare by namespace via the dedicated prop below.
+  const cursored = !!cursor && cursor.namespace === node.namespace && cursor.key === "";
+  const ref = useScrollIntoView(cursored);
   return (
     <>
-      <button className="trow trow--folder" style={indent} onClick={() => onToggle(node)}>
+      <button
+        ref={ref}
+        className={cursored ? "trow trow--folder trow--cursor" : "trow trow--folder"}
+        style={indent}
+        onClick={() => onToggle(node)}
+      >
         <span className={isOpen ? "chev chev--open" : "chev"}>
           {expandable && (
             <svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true">
@@ -164,6 +181,7 @@ function FolderRow({
               expanded={expanded}
               leaves={leaves}
               selected={selected}
+              cursor={cursor}
               onToggle={onToggle}
               onOpen={onOpen}
             />
@@ -176,6 +194,7 @@ function FolderRow({
                   row={r}
                   indent={childIndent}
                   selected={selected}
+                  cursor={cursor}
                   onOpen={onOpen}
                 />
               ))
@@ -195,17 +214,25 @@ function LeafRow({
   row,
   indent,
   selected,
+  cursor,
   onOpen,
 }: {
   row: Row;
   indent: { paddingLeft: number };
   selected: Selected;
+  cursor: Selected;
   onOpen: (namespace: string, key: string) => void;
 }) {
   const active = !!selected && selected.namespace === row.namespace && selected.key === row.key;
+  const cursored = !!cursor && cursor.namespace === row.namespace && cursor.key === row.key;
+  const ref = useScrollIntoView(cursored);
+  const cls = ["trow", "trow--leaf", active && "trow--active", cursored && "trow--cursor"]
+    .filter(Boolean)
+    .join(" ");
   return (
     <button
-      className={active ? "trow trow--leaf trow--active" : "trow trow--leaf"}
+      ref={ref}
+      className={cls}
       style={indent}
       onClick={() => onOpen(row.namespace, row.key)}
     >
@@ -219,16 +246,24 @@ function LeafRow({
 function MemoryRow({
   row,
   selected,
+  cursor,
   onOpen,
 }: {
   row: Row;
   selected: Selected;
+  cursor: Selected;
   onOpen: (namespace: string, key: string) => void;
 }) {
   const active = !!selected && selected.namespace === row.namespace && selected.key === row.key;
+  const cursored = !!cursor && cursor.namespace === row.namespace && cursor.key === row.key;
+  const ref = useScrollIntoView(cursored);
+  const cls = ["mrow", active && "mrow--active", cursored && "mrow--cursor"]
+    .filter(Boolean)
+    .join(" ");
   return (
     <button
-      className={active ? "mrow mrow--active" : "mrow"}
+      ref={ref}
+      className={cls}
       onClick={() => onOpen(row.namespace, row.key)}
     >
       <div className="mrow__head">
@@ -243,4 +278,14 @@ function MemoryRow({
       <span className="mrow__snippet">{row.snippet}</span>
     </button>
   );
+}
+
+// Scroll the cursored row into view when it becomes the cursor. `block: "nearest"` avoids
+// yanking the whole pane when the row is already visible.
+function useScrollIntoView(active: boolean) {
+  const ref = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (active) ref.current?.scrollIntoView({ block: "nearest" });
+  }, [active]);
+  return ref;
 }

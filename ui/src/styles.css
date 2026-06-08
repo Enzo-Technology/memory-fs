@@ -255,6 +255,13 @@ body,
 .trow--active {
   background: var(--accent-soft);
 }
+.trow--cursor {
+  box-shadow: inset 2px 0 0 var(--accent);
+  background: #f4f2eb;
+}
+.trow--active.trow--cursor {
+  background: var(--accent-soft);
+}
 .chev {
   width: 12px;
   height: 12px;
@@ -305,6 +312,13 @@ body,
   background: #f4f2eb;
 }
 .mrow--active {
+  background: var(--accent-soft);
+}
+.mrow--cursor {
+  box-shadow: inset 2px 0 0 var(--accent);
+  background: #f4f2eb;
+}
+.mrow--active.mrow--cursor {
   background: var(--accent-soft);
 }
 .mrow__head {

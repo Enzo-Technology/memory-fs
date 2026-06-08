@@ -23,17 +23,61 @@ export function Browser({
       ? "Agents haven't written anything here yet."
       : "Select a memory.";
 
-  // ⌘K / Ctrl+K opens the palette from anywhere.
+  // Global keyboard: ⌘K opens the palette; arrows/↵/Esc drive the tree/list cursor. Skipped while
+  // the palette is open (it owns its own keys) or while typing in a field (the top-bar search).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         vm.openPalette();
+        return;
+      }
+      if (vm.paletteOpen) return;
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      switch (e.key) {
+        case "ArrowDown":
+          e.preventDefault();
+          vm.moveCursor(1);
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          vm.moveCursor(-1);
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          vm.cursorExpand();
+          break;
+        case "ArrowLeft":
+          e.preventDefault();
+          vm.cursorCollapse();
+          break;
+        case "Enter":
+          e.preventDefault();
+          vm.cursorActivate();
+          break;
+        case "Escape":
+          e.preventDefault();
+          if (drilled) vm.showTree();
+          else if (vm.query) vm.setQuery("");
+          break;
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [vm.openPalette]);
+  }, [
+    vm.openPalette,
+    vm.paletteOpen,
+    vm.moveCursor,
+    vm.cursorExpand,
+    vm.cursorCollapse,
+    vm.cursorActivate,
+    vm.showTree,
+    vm.setQuery,
+    vm.query,
+    drilled,
+  ]);
 
   return (
     <div className={drilled ? "app app--drill" : "app"}>
@@ -57,6 +101,7 @@ export function Browser({
             flat={vm.flat}
             results={vm.results}
             selected={vm.selected}
+            cursorAddress={vm.cursorAddress}
             onToggle={vm.toggleFolder}
             onOpen={vm.open}
             onExpandAll={vm.expandAll}
