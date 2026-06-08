@@ -15,6 +15,7 @@ import type { BrowseResult, ReadResult } from "../../src/core/store";
 import type { MemoryType } from "../../src/core/db";
 import { buildTree, type TreeNode } from "./namespaceTree";
 import { addressToPath, parseAddress } from "./route";
+import { sortByAddress } from "./sortRows";
 
 export interface Row {
   namespace: string;
@@ -111,7 +112,9 @@ export function useBrowser(): BrowserView {
     };
   }, []);
 
-  // 2. Flat lens list (Recent/Hubs/Orphans). Skipped for the tree lens and while searching.
+  // 2. Flat lens list. Skipped for the tree lens and while searching. "all" reuses the recent
+  //    endpoint at a high limit and sorts client-side by address — a complete, stably-ordered
+  //    list with no backend change (fine at team scale; see plan note on the cap).
   useEffect(() => {
     if (query.trim() || lens === "namespaces") {
       setFlat(null);
@@ -119,10 +122,20 @@ export function useBrowser(): BrowserView {
     }
     let live = true;
     setFlat(null);
-    listMemories(lens as FlatLens).then((b) => {
+    const load =
+      lens === "all"
+        ? listMemories("recent", undefined, 1000).then((b) => ({
+            rows: sortByAddress(toRows(b)),
+            total: b.total,
+          }))
+        : listMemories(lens as FlatLens).then((b) => ({
+            rows: toRows(b),
+            total: b.total,
+          }));
+    load.then(({ rows, total }) => {
       if (!live) return;
-      setFlat(toRows(b));
-      setTotals((t) => ({ ...t, memories: b.total }));
+      setFlat(rows);
+      setTotals((t) => ({ ...t, memories: total }));
     });
     return () => {
       live = false;

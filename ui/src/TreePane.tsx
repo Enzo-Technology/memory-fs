@@ -12,7 +12,7 @@ type Selected = { namespace: string; key: string } | null;
 
 function paneTitle(lens: Lens, query: string): string {
   if (query.trim()) return "Results";
-  return { namespaces: "Namespaces", recent: "Recent", hubs: "Hubs", orphans: "Orphans" }[lens];
+  return { namespaces: "Namespaces", all: "All", recent: "Recent", hubs: "Hubs", orphans: "Orphans" }[lens];
 }
 
 function emptyLensMessage(lens: Lens): string {

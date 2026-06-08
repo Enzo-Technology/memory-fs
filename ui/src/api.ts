@@ -7,7 +7,7 @@ import type { Memory } from "../../src/core/db";
 // The flat lenses that resolve to openable memory rows (used both as a top-level lens and, with a
 // namespace, to fetch one folder's leaves). "namespaces" is the tree and is fetched separately.
 export type FlatLens = "recent" | "hubs" | "orphans";
-export type Lens = "namespaces" | FlatLens;
+export type Lens = "namespaces" | "all" | FlatLens;
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(path, { credentials: "include" });
@@ -32,8 +32,12 @@ export async function listNamespaces(): Promise<{
   return { items: b.items, total: b.total };
 }
 
-export function listMemories(kind: FlatLens, namespace?: string): Promise<BrowseResult> {
-  const p = new URLSearchParams({ kind, limit: "100" });
+export function listMemories(
+  kind: FlatLens,
+  namespace?: string,
+  limit = 100,
+): Promise<BrowseResult> {
+  const p = new URLSearchParams({ kind, limit: String(limit) });
   if (namespace) p.set("namespace", namespace);
   return get<BrowseResult>(`/api/memories?${p.toString()}`);
 }

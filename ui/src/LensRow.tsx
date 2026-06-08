@@ -5,6 +5,7 @@ import type { Lens } from "./api";
 
 const LENSES: { id: Lens; label: string }[] = [
   { id: "namespaces", label: "Namespaces" },
+  { id: "all", label: "All" },
   { id: "recent", label: "Recent" },
   { id: "hubs", label: "Hubs" },
   { id: "orphans", label: "Orphans" },
