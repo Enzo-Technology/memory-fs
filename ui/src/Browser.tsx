@@ -29,7 +29,8 @@ export function Browser({
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        vm.openPalette();
+        if (vm.paletteOpen) vm.closePalette();
+        else vm.openPalette();
         return;
       }
       if (vm.paletteOpen) return;
@@ -68,6 +69,7 @@ export function Browser({
     return () => window.removeEventListener("keydown", onKey);
   }, [
     vm.openPalette,
+    vm.closePalette,
     vm.paletteOpen,
     vm.moveCursor,
     vm.cursorExpand,
