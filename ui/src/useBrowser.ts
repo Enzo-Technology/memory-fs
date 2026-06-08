@@ -46,6 +46,9 @@ export interface BrowserView {
   open: (namespace: string, key: string) => void;
   drill: () => void;
   showTree: () => void;
+  paletteOpen: boolean;
+  openPalette: () => void;
+  closePalette: () => void;
 }
 
 // First non-empty line of content — the de-facto title/snippet (the store never stores a title).
@@ -90,6 +93,7 @@ export function useBrowser(): BrowserView {
   );
   const [detail, setDetail] = useState<ReadResult | null>(null);
   const [mode, setMode] = useState<Mode>("split");
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [totals, setTotals] = useState({ memories: 0, namespaces: 0 });
   const inflight = useRef<Set<string>>(new Set());
   const loaded = useRef<Set<string>>(new Set());
@@ -258,5 +262,8 @@ export function useBrowser(): BrowserView {
     open,
     drill: useCallback(() => setMode("drill"), []),
     showTree: useCallback(() => setMode("split"), []),
+    paletteOpen,
+    openPalette: useCallback(() => setPaletteOpen(true), []),
+    closePalette: useCallback(() => setPaletteOpen(false), []),
   };
 }
