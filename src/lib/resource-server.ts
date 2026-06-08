@@ -1,6 +1,6 @@
 // The MCP Resource Server: the skeptic half of the auth layer. It guards /mcp by
 // verifying bearer JWTs *locally* against the Authorization Server's JWKS (no
-// introspection — see docs/adr/0001), and advertises which AS it trusts via the
+// introspection), and advertises which AS it trusts via the
 // Protected Resource Metadata doc. Both halves are bound to the one authContract,
 // so the audience it advertises and the audience it enforces are the same string.
 import { createRemoteJWKSet, jwtVerify } from "jose";

@@ -8,8 +8,6 @@ Open-source, self-hosted. Designed to let Claude, Cursor, ChatGPT, and any custo
 
 **Phase 1 + 5 prototype.** Wiki-shaped MCP server: auto-extracted `[[wikilinks]]`, backlinks, hubs, tag vocabulary. 7-tool surface validated against Claude Haiku 4.5 via an included eval harness. Runs over stdio by default, or over Streamable HTTP with bearer auth for a hosted shared store (see Hosting below).
 
-See [`docs/plans/2026-05-18-phase-1-wiki-layer-and-eval.md`](docs/plans/2026-05-18-phase-1-wiki-layer-and-eval.md) and [`docs/plans/2026-05-27-phase-5-hosted-gcp.md`](docs/plans/2026-05-27-phase-5-hosted-gcp.md) for the full design.
-
 ## Quick start
 
 ```sh
@@ -24,21 +22,21 @@ DB lives at `~/.memory-fs/memory.db` by default; override with `MEMORY_FS_DB=/pa
 
 | Tool | What it does |
 |---|---|
-| `memory_note` | Write a memory; auto-extracts `[[wikilinks]]`; warns on near-duplicates |
-| `memory_recall` | Search memories (FTS5); hub records promoted |
-| `memory_browse` | Discovery: `kind=index/recent/hubs/orphans/tags` |
-| `memory_read` | Fetch one by `(namespace, key)` |
-| `memory_delete` | Permanent delete; refuses if backlinks exist (`force=true` overrides) |
-| `memory_link` | Manual link (most links come from auto-extracted `[[wikilinks]]`) |
-| `memory_backlinks` | List records that point to a given memory |
+| `context_write` | Write a record to the shared context; auto-extracts `[[wikilinks]]`; warns on near-duplicates |
+| `context_search` | Search the shared context (FTS5); hub records promoted |
+| `context_browse` | Discovery: `kind=index/recent/hubs/orphans/tags` |
+| `context_read` | Fetch one by `(namespace, key)` |
+| `context_delete` | Permanent delete; refuses if backlinks exist (`force=true` overrides) |
+| `context_link` | Manual link (most links come from auto-extracted `[[wikilinks]]`) |
+| `context_backlinks` | List records that point to a given record |
 
 ## Hosting (shared store)
 
-Set `MEMORY_FS_HTTP_PORT` to serve over Streamable HTTP instead of stdio; `MEMORY_FS_TOKEN` is then required and every request must send `Authorization: Bearer <token>`. The server binds `127.0.0.1`, so run it behind a TLS-terminating reverse proxy (the included [`deploy/`](deploy/) has a Caddy config, systemd units, and a GCS backup timer for a single free-tier VM). Full runbook: [`docs/plans/2026-05-27-phase-5-hosted-gcp.md`](docs/plans/2026-05-27-phase-5-hosted-gcp.md).
+Set `MEMORY_FS_HTTP_PORT` to serve over Streamable HTTP instead of stdio; `MEMORY_FS_TOKEN` is then required and every request must send `Authorization: Bearer <token>`. The server binds `127.0.0.1`, so run it behind a TLS-terminating reverse proxy (the included [`deploy/`](deploy/) has a Caddy config, systemd units, and a GCS backup timer for a single free-tier VM). Full runbook: [`deploy/README.md`](deploy/README.md).
 
 ## Local web UI
 
-A local-only page to browse, read, and delete memories in a hosted store. It runs a small proxy on your machine that holds the bearer token server-side and talks to the remote over MCP — **the token never reaches the browser**, and the browser only ever talks to `localhost`.
+A local-only page to browse, read, and delete records in a hosted store. It runs a small proxy on your machine that holds the bearer token server-side and talks to the remote over MCP — **the token never reaches the browser**, and the browser only ever talks to `localhost`.
 
 ```sh
 npm run build
@@ -49,7 +47,7 @@ npm run ui
 # then open http://127.0.0.1:4040
 ```
 
-`MEMORY_FS_UI_PORT` defaults to 4040. Scope is browse/read/delete only — memories are still authored by agents via `memory_note`.
+`MEMORY_FS_UI_PORT` defaults to 4040. Scope is browse/read/delete only — memories are still authored by agents via `context_write`.
 
 To keep the token out of your shell, store `MEMORY_FS_URL` and `MEMORY_FS_TOKEN` in [Infisical](https://infisical.com) and run `npm run ui:secure` (`infisical run -- node dist/ui-server.js`) — it injects the secrets as env vars. Requires `infisical login` + `infisical init` once to link the project; pass `--env=<name>` to `infisical run` to pick a non-default environment.
 

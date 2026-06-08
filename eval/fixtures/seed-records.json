@@ -1,0 +1,17 @@
+[
+  { "namespace": "project:acme", "key": "core-thesis", "type": "project",
+    "tags": ["core-thesis", "thesis-under-test"],
+    "content": "## Acme — Core Product Thesis (hardened 2026-06-05, thesis-under-test)\n\nDevelopers lose hours tracking down which tool broke the pipeline. The pain is observability-at-integration: knowing at a glance which component is misbehaving, not digging through logs. Hardened 2026-06-05 as the live strategic anchor — every feature decision should trace back to this." },
+  { "namespace": "project:acme", "key": "product-scope", "type": "project",
+    "tags": ["anchor", "positioning"],
+    "content": "## Acme — Product Scope\n\nAcme ships as a CLI plus a desktop app. The CLI targets developers who live in the terminal; the desktop app serves less terminal-fluent teammates who need the same pipeline visibility without command-line friction. Both surfaces share the same underlying engine." },
+  { "namespace": "project:acme", "key": "deploy-smoke", "type": "note",
+    "tags": ["deploy", "smoke"],
+    "content": "# Hosted deploy smoke\n\nManual curl checklist run after each deploy to verify the box is up. (stale: superseded by CI pipeline — manual steps retired last sprint.)" },
+  { "namespace": "reference", "key": "stack-conventions", "type": "reference",
+    "tags": ["reference"],
+    "content": "## Stack conventions\n\nTypeScript everywhere; pnpm workspaces; conventional commits." },
+  { "namespace": "reference", "key": "oncall-rotation", "type": "reference",
+    "tags": ["reference"],
+    "content": "## On-call\n\nWeekly rotation, handoff Mondays 10:00." }
+]

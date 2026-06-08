@@ -20,7 +20,18 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "dev:ui": "vite build ui --watch",
-    "build:ui": "vite build ui"
+    "build:ui": "vite build ui",
+    "eval:snapshot": "node eval/snapshot-surfaces.mjs",
+    "eval:pilot": "node eval/wording-run.mjs --pilot",
+    "eval:pilot:openai": "node eval/wording-run.mjs --pilot-openai",
+    "eval:full": "node eval/wording-run.mjs --full",
+    "eval:score": "node eval/wording-score.mjs",
+    "eval:judge": "node eval/wording-judge.mjs",
+    "eval:analyze": "node eval/analysis.mjs",
+    "eval:charts": "node eval/charts.mjs",
+    "eval:all": "npm run eval:score && npm run eval:analyze && npm run eval:charts",
+    "eval:clean": "rm -rf eval/artifacts/M eval/artifacts/C eval/artifacts/K eval/artifacts/N eval/artifacts/MxC eval/artifacts/CxM eval/artifacts/PROD",
+    "eval:rerun": "node eval/wording-run.mjs --pilot --conditions=M,C --scripts=P1,P2,P3b && node eval/wording-run.mjs --pilot-openai --conditions=M,C --scripts=P1,P2,P3b && node eval/wording-run.mjs --pilot --conditions=K,MxC,CxM --scripts=P1,P2 && node eval/wording-run.mjs --pilot-openai --conditions=K,MxC,CxM --scripts=P1,P2 && npm run eval:all"
   },
   "dependencies": {
     "@better-auth/oauth-provider": "^1.6.13",
@@ -34,6 +45,7 @@
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.30.1",
+    "@mcpjam/sdk": "^1.12.0",
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^22.7.4",
     "@vitejs/plugin-react": "^6.0.2",

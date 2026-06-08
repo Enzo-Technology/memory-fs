@@ -84,6 +84,57 @@ describe("server HTTP transport", () => {
     }
   });
 
+  it("serves /health unauthenticated with 200", async () => {
+    const port = await getFreePort();
+    const server = await spawnHttpServer(port);
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/health`);
+      expect(res.status).toBe(200);
+      expect((await res.json()) as { status: string }).toEqual({ status: "ok" });
+    } finally {
+      server.kill();
+    }
+  });
+
+  it("rejects a present-but-untrusted Origin on /mcp with 403 before auth", async () => {
+    const port = await getFreePort();
+    const server = await spawnHttpServer(port);
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "https://evil.example",
+        },
+        body: initBody,
+      });
+      // 403 (not 401): the Origin gate fires before the bearer check.
+      expect(res.status).toBe(403);
+    } finally {
+      server.kill();
+    }
+  });
+
+  it("allows a trusted Origin through the gate (still 401 without a bearer)", async () => {
+    const port = await getFreePort();
+    const server = await spawnHttpServer(port);
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          // BASE_URL resolves to this when only MEMORY_FS_HTTP_PORT is set, so it's
+          // in the trusted set — the request clears the Origin gate and hits auth.
+          Origin: `http://127.0.0.1:${port}`,
+        },
+        body: initBody,
+      });
+      expect(res.status).toBe(401);
+    } finally {
+      server.kill();
+    }
+  });
+
   it("returns 401 for an unverifiable bearer (no static-token bypass)", async () => {
     const port = await getFreePort();
     const server = await spawnHttpServer(port);
@@ -118,6 +169,17 @@ describe("server HTTP transport", () => {
       expect(prm.authorization_servers).toEqual([
         `http://127.0.0.1:${port}/api/auth`,
       ]);
+    } finally {
+      server.kill();
+    }
+  });
+
+  it("returns 401 on /api/memories without a session cookie", async () => {
+    const port = await getFreePort();
+    const server = await spawnHttpServer(port);
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/memories?kind=recent`);
+      expect(res.status).toBe(401);
     } finally {
       server.kill();
     }

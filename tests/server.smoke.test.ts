@@ -60,17 +60,17 @@ describe("server stdio smoke", () => {
     const list = responses.find((r) => r.id === 2);
     const names = list?.result?.tools?.map((t) => t.name).sort();
     expect(names).toEqual([
-      "memory_backlinks",
-      "memory_browse",
-      "memory_delete",
-      "memory_link",
-      "memory_note",
-      "memory_read",
-      "memory_recall",
+      "context_backlinks",
+      "context_browse",
+      "context_delete",
+      "context_link",
+      "context_read",
+      "context_search",
+      "context_write",
     ]);
   });
 
-  it("round-trips note → recall → backlinks", async () => {
+  it("round-trips write → search → backlinks", async () => {
     const responses = await callServer([
       {
         jsonrpc: "2.0",
@@ -87,7 +87,7 @@ describe("server stdio smoke", () => {
         id: 2,
         method: "tools/call",
         params: {
-          name: "memory_note",
+          name: "context_write",
           arguments: {
             namespace: "test",
             key: "target",
@@ -100,7 +100,7 @@ describe("server stdio smoke", () => {
         id: 3,
         method: "tools/call",
         params: {
-          name: "memory_note",
+          name: "context_write",
           arguments: {
             namespace: "test",
             key: "src",
@@ -113,7 +113,7 @@ describe("server stdio smoke", () => {
         id: 4,
         method: "tools/call",
         params: {
-          name: "memory_recall",
+          name: "context_search",
           arguments: { query: "auth Clerk" },
         },
       },
@@ -122,7 +122,7 @@ describe("server stdio smoke", () => {
         id: 5,
         method: "tools/call",
         params: {
-          name: "memory_backlinks",
+          name: "context_backlinks",
           arguments: { namespace: "test", key: "target" },
         },
       },

@@ -1,0 +1,30 @@
+[
+  {
+    "name": "context_backlinks",
+    "description": "Find which of your memories refer back to this one."
+  },
+  {
+    "name": "context_browse",
+    "description": "Look over the memories you have saved so far."
+  },
+  {
+    "name": "context_delete",
+    "description": "Forget a memory you no longer need to keep."
+  },
+  {
+    "name": "context_link",
+    "description": "Connect two memories so you can recall them together later."
+  },
+  {
+    "name": "context_read",
+    "description": "Read a memory you saved earlier, by its exact location."
+  },
+  {
+    "name": "context_search",
+    "description": "Search your memories about the user and past conversations by keyword."
+  },
+  {
+    "name": "context_write",
+    "description": "Save a memory about the user or your past conversations so you can recall it later — names, preferences, what came up, and anything worth remembering."
+  }
+]

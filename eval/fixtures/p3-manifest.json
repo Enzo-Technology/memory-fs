@@ -1,0 +1,34 @@
+{
+  "items": [
+    {
+      "id": "apperror",
+      "kind": "durable",
+      "gist": "all CLI errors use AppError with a code",
+      "shouldFile": true
+    },
+    {
+      "id": "telemetry-optout",
+      "kind": "durable",
+      "gist": "telemetry is opt-out, documented in README",
+      "shouldFile": true
+    },
+    {
+      "id": "config-format",
+      "kind": "reverted",
+      "gist": "considered TOML for config, reverted to JSON same session",
+      "shouldFile": false
+    },
+    {
+      "id": "rex",
+      "kind": "aside",
+      "gist": "Ben's dog Rex barked at the mailman",
+      "shouldFile": false
+    },
+    {
+      "id": "auth-provider",
+      "kind": "deferred",
+      "gist": "auth provider choice explicitly deferred to next week",
+      "shouldFile": false
+    }
+  ]
+}
