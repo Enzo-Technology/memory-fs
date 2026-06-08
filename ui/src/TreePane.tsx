@@ -16,7 +16,7 @@ type Selected = { namespace: string; key: string } | null;
 function paneTitle(lens: Lens, query: string, selectedTag: string | null): string {
   if (query.trim()) return "Results";
   if (lens === "tags") return selectedTag ? `#${selectedTag}` : "Tags";
-  return { namespaces: "Namespaces", all: "All", recent: "Recent", hubs: "Hubs", orphans: "Orphans", tags: "Tags" }[lens];
+  return { namespaces: "Namespaces", all: "All", recent: "Recent", hubs: "Hubs", orphans: "Orphans" }[lens];
 }
 
 function emptyLensMessage(lens: Lens): string {
@@ -147,6 +147,7 @@ function renderBody(p: {
         </button>
       ));
     }
+    if (p.flatError) return <p className="tree__error">Couldn&apos;t load — retry?</p>;
     if (!p.flat) return <div className="tree__skeleton">…</div>;
     return (
       <>
