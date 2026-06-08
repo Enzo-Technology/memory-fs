@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Does tool wording steer what models file? — pilot writeup</title>
+<style>
+  :root { --ink: #1a1a1a; --soft: #666; --line: #e2e2e2; --accent: #4e79a7; --warn: #b4451f; }
+  body { font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         color: var(--ink); max-width: 760px; margin: 0 auto; padding: 56px 20px 96px; }
+  h1 { font-size: 1.7em; line-height: 1.2; margin: 0 0 .2em; }
+  h2 { font-size: 1.25em; margin: 2.2em 0 .5em; padding-top: .4em; }
+  h3 { font-size: 1.0em; color: var(--soft); margin: 1.6em 0 .3em; text-transform: uppercase; letter-spacing: .04em; }
+  .sub { color: var(--soft); margin: 0 0 1.5em; font-size: .95em; }
+  p { margin: .7em 0; }
+  strong { font-weight: 650; }
+  code { font: .88em ui-monospace, "SF Mono", Menlo, monospace; background: #f4f4f4; padding: .1em .35em; border-radius: 3px; }
+  table { border-collapse: collapse; width: 100%; margin: 1.1em 0; font-size: .92em; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+  th { font-weight: 650; border-bottom: 2px solid #ccc; }
+  td.n { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .big { font-weight: 650; }
+  figure { margin: 1.4em 0; }
+  figure svg { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 6px; }
+  figcaption { color: var(--soft); font-size: .88em; margin-top: .5em; }
+  .takeaway { border-left: 3px solid var(--accent); background: #f7f9fb; padding: .8em 1.1em; margin: 1.3em 0; border-radius: 0 4px 4px 0; }
+  .warn { border-left-color: var(--warn); background: #fbf5f2; }
+  hr { border: none; border-top: 1px solid var(--line); margin: 2.5em 0; }
+  .foot { color: var(--soft); font-size: .88em; }
+  .pill { display: inline-block; font-size: .8em; padding: .1em .5em; border-radius: 10px; background: #eef; color: #335; margin-left: .4em; vertical-align: middle; }
+  table.surface td { vertical-align: top; }
+  table.surface td:first-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  table.surface code { background: none; padding: 0; font-weight: 600; }
+  table.surface .desc { color: var(--ink); font-size: .96em; }
+  .log { background: #1e1e1e; color: #e6e6e6; border-radius: 6px; padding: 14px 16px; margin: 1em 0;
+         font: .82em/1.5 ui-monospace, "SF Mono", Menlo, monospace; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+  .log .k { color: #6cb6ff; }       /* tool / key */
+  .log .v { color: #a5d6a7; }       /* value */
+  .log .c { color: #888; }          /* comment */
+  .log .w { color: #ffb454; }       /* warning / contrast */
+  details { margin: 1em 0; }
+  summary { cursor: pointer; font-weight: 600; color: var(--accent); }
+  details[open] summary { margin-bottom: .6em; }
+</style>
+</head>
+<body>
+
+<h1>Does the <em>name</em> of a tool change what a model files in it?</h1>
+<p class="sub">Tool-wording pilot · 2026-06-07, corrected re-run 2026-06-08 · memory-fs · 2 models, n=5 per cell · cross-checked on two independent agent runners</p>
+
+<p>We're building a shared memory store that agents reach over MCP. The open product
+question was small and stubborn: do we call it <strong>memory</strong>,
+<strong>context</strong>, or <strong>knowledge</strong>? It feels like branding. We
+suspected it wasn't.</p>
+
+<p>The bet: a tool's <strong>name + description + result strings are its filing
+policy</strong>. They're the only thing telling a model what belongs in the store,
+when to read it, and when to clean it up. If models carry the everyday connotations
+of these words — <em>memory</em> = personal, episodic, automatic; <em>context</em> =
+curated, shared, load-before-you-act; <em>knowledge</em> = settled reference — then
+the <em>same backend</em> under different vocabularies should produce
+<em>measurably different</em> behavior. So this is an interface question wearing a
+branding costume.</p>
+
+<h2>How we tested it</h2>
+
+<p>One renameable MCP server sits over the real store. A single env var swaps the
+surface: the <strong>noun changes</strong> (<code>memory_</code> /
+<code>context_</code> / <code>knowledge_</code>) while the <strong>verbs stay
+neutral and identical</strong> (<code>_write</code>, <code>_read</code>,
+<code>_search</code>, <code>_browse</code>, …) and the argument schemas never move.
+The only signal that differs between conditions is the vocabulary — the noun and the
+description prose. Backend, data, and tool arguments are byte-for-byte the same.</p>
+
+<p>The model never gets a hint. The system prompt says nothing about a store; the
+user turns never name one. Whatever the model does — read first, write trivia, file
+a decision — comes entirely from reading the tool surface. Probes:</p>
+
+<ul>
+  <li><strong>Cold start</strong> — "draft a headline" (does it read the store before acting?), then a direct recall question.</li>
+  <li><strong>Working session</strong>, dropped on top of a real scrubbed coding chat — a contradiction ("we're dropping the desktop app"), a personal aside ("my dog Rex was barking at the mailman"), and a durable decision ("all errors go through <code>AppError</code> from now on").</li>
+  <li><strong>Wrap-up</strong> — an explicit "tidy up before we close out."</li>
+</ul>
+
+<p>Two same-tier models: Claude <strong>Sonnet 4.6</strong> and OpenAI
+<strong>gpt-5.5</strong>, both reasoning at low depth. Every cell ran n=5. Metrics are
+deterministic, read straight off the tool-call logs.</p>
+
+<h2>The actual surfaces</h2>
+
+<p>This is the whole manipulation. Below is the <em>real</em> name and description the
+model saw for the <strong>write</strong> tool in each condition — the single
+policy-bearing line. The other six verbs (<code>read</code>, <code>search</code>,
+<code>browse</code>, <code>link</code>, <code>backlinks</code>, <code>delete</code>)
+followed the same framing; full surfaces are in the appendix.</p>
+
+<table class="surface">
+  <thead><tr><th>Condition</th><th>Tool name &amp; its description</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>M <span class="foot">(memory)</span></td>
+      <td><code>memory_write</code><br><span class="desc">"Save a memory about the user or your past conversations so you can recall it later — names, preferences, what came up, and anything worth remembering."</span></td>
+    </tr>
+    <tr>
+      <td>C <span class="foot">(context)</span></td>
+      <td><code>context_write</code><br><span class="desc">"Write a record to the shared team context: key decisions, conventions, and direction the team relies on. Update it when direction changes."</span></td>
+    </tr>
+    <tr>
+      <td>K <span class="foot">(knowledge)</span></td>
+      <td><code>knowledge_write</code><br><span class="desc">"Add an entry to the team knowledge base: settled facts, conventions, and reference material that are established and intended to be durable."</span></td>
+    </tr>
+    <tr>
+      <td>N <span class="foot">(neutral control)</span></td>
+      <td><code>store_write</code><br><span class="desc">"Write a record to the store."</span></td>
+    </tr>
+    <tr>
+      <td>MxC <span class="foot">(cross)</span></td>
+      <td><code>memory_write</code> — but with C's description verbatim:<br><span class="desc">"Write a record to the shared team context: key decisions, conventions, and direction the team relies on. Update it when direction changes."</span></td>
+    </tr>
+    <tr>
+      <td>CxM <span class="foot">(cross)</span></td>
+      <td><code>context_write</code> — but with M's description verbatim:<br><span class="desc">"Save a memory about the user or your past conversations so you can recall it later — names, preferences, what came up, and anything worth remembering."</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>That's the experiment in two rows of detail: <strong>MxC</strong> is the
+<code>memory_</code> name wearing context's description; <strong>CxM</strong> is the
+<code>context_</code> name wearing memory's. They let us split the noun from the prose
+and see which one the model is actually reading. (Result strings matched too — a
+memory write replies "Memory saved."; a context write replies "Shared context
+updated.")</p>
+
+<h2>Round 1 — memory vs context</h2>
+
+<p>The pilot ran just two conditions, M and C, to see if there was any separation
+worth chasing. There was, and it was blunt.</p>
+
+<p>The cleanest result is the <strong>dog</strong>. On the "my dog Rex" aside —
+pure personal trivia, junk for a shared team store — <code>memory</code> invited a
+write almost every time and <code>context</code> suppressed it completely.</p>
+
+<table>
+  <thead><tr><th>Trivia write (the dog aside)</th><th class="n">memory (M)</th><th class="n">context (C)</th></tr></thead>
+  <tbody>
+    <tr><td>Sonnet 4.6</td><td class="n big">5 / 5</td><td class="n big">0 / 5</td></tr>
+    <tr><td>gpt-5.5</td><td class="n big">3 / 5</td><td class="n big">0 / 5</td></tr>
+  </tbody>
+</table>
+
+<p>The other half of round 1: <code>context</code>'s "read before acting" framing
+made <strong>gpt-5.5 read the store first every single time</strong> (5/5 under
+context vs 0/5 under memory). Sonnet read before acting in <em>both</em> conditions —
+in fact it reads in every condition we tested. So the provider difference is real,
+but it isn't "one reads, one doesn't": <strong>Sonnet always reads; gpt-5.5 reads
+only when the description tells it to.</strong> The wording effect on reading is
+visible in the model that <em>isn't</em> saturated.</p>
+
+<div class="takeaway">
+  <strong>Round 1 verdict:</strong> wording moves behavior, and it moves it exactly
+  where it should — on <em>discriminating junk from signal</em>. "Memory" says
+  <em>keep things about the user</em>, so the model keeps the dog. "Context" says
+  <em>shared team record</em>, so the dog gets dropped. Worth a second round.
+</div>
+
+<h2>Round 2 — knowledge, and the crossed conditions</h2>
+
+<p>Round 2 added <code>knowledge</code> (K) plus the two experiments that actually
+answer the product question: the <strong>crossed</strong> conditions. <code>MxC</code>
+is a <em>memory</em> name with a <em>context</em> description; <code>CxM</code> is a
+<em>context</em> name with a <em>memory</em> description. If the noun is what matters,
+behavior follows the name. If the description is what matters, behavior follows the
+prose — regardless of what the tool is called.</p>
+
+<p>The charts below are the whole story. Each bar is one condition; the two colors
+are the two models. Watch where the crosses land.</p>
+
+<figure>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 420" width="700" height="420" font-family="sans-serif"><rect width="700" height="420" fill="#fff"/><text x="350" y="30" text-anchor="middle" font-size="15" font-weight="bold" fill="#222">Trivia-write rate (m4 / T4) by condition</text><g transform="translate(52,56)"><line x1="0" y1="284" x2="628" y2="284" stroke="#e0e0e0" stroke-width="1"/><text x="-6" y="288" text-anchor="end" font-size="11" fill="#555">0%</text><line x1="0" y1="213" x2="628" y2="213" stroke="#e0e0e0" stroke-width="1"/><text x="-6" y="217" text-anchor="end" font-size="11" fill="#555">25%</text><line x1="0" y1="142" x2="628" y2="142" stroke="#e0e0e0" stroke-width="1"/><text x="-6" y="146" text-anchor="end" font-size="11" fill="#555">50%</text><line x1="0" y1="71" x2="628" y2="71" stroke="#e0e0e0" stroke-width="1"/><text x="-6" y="75" text-anchor="end" font-size="11" fill="#555">75%</text><line x1="0" y1="0" x2="628" y2="0" stroke="#e0e0e0" stroke-width="1"/><text x="-6" y="4" text-anchor="end" font-size="11" fill="#555">100%</text><text transform="rotate(-90)" x="-142" y="-40" text-anchor="middle" font-size="12" fill="#555">Write rate</text><rect x="4.0" y="284.0" width="56.8" height="0.0" fill="#4e79a7" rx="2"/><text x="32.4" y="280.0" text-anchor="middle" font-size="10" fill="#4e79a7">0%</text><rect x="64.8" y="284.0" width="56.8" height="0.0" fill="#f28e2b" rx="2"/><text x="93.2" y="280.0" text-anchor="middle" font-size="10" fill="#f28e2b">0%</text><text x="62.8" y="302" text-anchor="middle" font-size="12" fill="#333">C</text><rect x="129.6" y="56.8" width="56.8" height="227.2" fill="#4e79a7" rx="2"/><text x="158.0" y="52.8" text-anchor="middle" font-size="10" fill="#4e79a7">80%</text><rect x="190.4" y="113.6" width="56.8" height="170.4" fill="#f28e2b" rx="2"/><text x="218.8" y="109.6" text-anchor="middle" font-size="10" fill="#f28e2b">60%</text><text x="188.4" y="302" text-anchor="middle" font-size="12" fill="#333">CxM</text><rect x="255.2" y="284.0" width="56.8" height="0.0" fill="#4e79a7" rx="2"/><text x="283.6" y="280.0" text-anchor="middle" font-size="10" fill="#4e79a7">0%</text><rect x="316.0" y="284.0" width="56.8" height="0.0" fill="#f28e2b" rx="2"/><text x="344.4" y="280.0" text-anchor="middle" font-size="10" fill="#f28e2b">0%</text><text x="314.0" y="302" text-anchor="middle" font-size="12" fill="#333">K</text><rect x="380.8" y="113.6" width="56.8" height="170.4" fill="#4e79a7" rx="2"/><text x="409.2" y="109.6" text-anchor="middle" font-size="10" fill="#4e79a7">60%</text><rect x="441.6" y="0.0" width="56.8" height="284.0" fill="#f28e2b" rx="2"/><text x="470.0" y="-4.0" text-anchor="middle" font-size="10" fill="#f28e2b">100%</text><text x="439.6" y="302" text-anchor="middle" font-size="12" fill="#333">M</text><rect x="506.4" y="284.0" width="56.8" height="0.0" fill="#4e79a7" rx="2"/><text x="534.8" y="280.0" text-anchor="middle" font-size="10" fill="#4e79a7">0%</text><rect x="567.2" y="284.0" width="56.8" height="0.0" fill="#f28e2b" rx="2"/><text x="595.6" y="280.0" text-anchor="middle" font-size="10" fill="#f28e2b">0%</text><text x="565.2" y="302" text-anchor="middle" font-size="12" fill="#333">MxC</text><line x1="0" y1="0" x2="0" y2="284" stroke="#999" stroke-width="1"/><line x1="0" y1="284" x2="628" y2="284" stroke="#999" stroke-width="1"/></g><rect x="230" y="376" width="12" height="12" fill="#4e79a7" rx="1"/><text x="246" y="386" font-size="11" fill="#333">openai</text><rect x="350" y="376" width="12" height="12" fill="#f28e2b" rx="1"/><text x="366" y="386" font-size="11" fill="#333">sonnet</text></svg>
+  <figcaption>Trivia writes. <strong>M</strong> is tall (files the dog), <strong>C</strong> and <strong>K</strong> are flat (drop it). The crosses give it away: <strong>CxM</strong> (context <em>name</em>, memory <em>description</em>) behaves like M, and <strong>MxC</strong> (memory <em>name</em>, context <em>description</em>) behaves like C. The bars track the <em>description</em>, not the noun.</figcaption>
+</figure>
+
+<figure>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 420" width="700" height="420" font-family="sans-serif"><rect width="700" height="420" fill="#fff"/><text x="350" y="30" text-anchor="middle" font-size="15" font-weight="bold" fill="#222">Unprompted-read rate (m1 / T1) by condition</text><g transform="translate(52,56)"><line x1="0" y1="284" x2="628" y2="284" stroke="#e0e0e0" stroke-width="1"/><text x="-6" y="288" text-anchor="end" font-size="11" fill="#555">0%</text><line x1="0" y1="213" x2="628" y2="213" stroke="#e0e0e0" stroke-width="1"/><text x="-6" y="217" text-anchor="end" font-size="11" fill="#555">25%</text><line x1="0" y1="142" x2="628" y2="142" stroke="#e0e0e0" stroke-width="1"/><text x="-6" y="146" text-anchor="end" font-size="11" fill="#555">50%</text><line x1="0" y1="71" x2="628" y2="71" stroke="#e0e0e0" stroke-width="1"/><text x="-6" y="75" text-anchor="end" font-size="11" fill="#555">75%</text><line x1="0" y1="0" x2="628" y2="0" stroke="#e0e0e0" stroke-width="1"/><text x="-6" y="4" text-anchor="end" font-size="11" fill="#555">100%</text><text transform="rotate(-90)" x="-142" y="-40" text-anchor="middle" font-size="12" fill="#555">Read rate</text><rect x="4.0" y="0.0" width="56.8" height="284.0" fill="#4e79a7" rx="2"/><text x="32.4" y="-4.0" text-anchor="middle" font-size="10" fill="#4e79a7">100%</text><rect x="64.8" y="0.0" width="56.8" height="284.0" fill="#f28e2b" rx="2"/><text x="93.2" y="-4.0" text-anchor="middle" font-size="10" fill="#f28e2b">100%</text><text x="62.8" y="302" text-anchor="middle" font-size="12" fill="#333">C</text><rect x="129.6" y="170.4" width="56.8" height="113.6" fill="#4e79a7" rx="2"/><text x="158.0" y="166.4" text-anchor="middle" font-size="10" fill="#4e79a7">40%</text><rect x="190.4" y="0.0" width="56.8" height="284.0" fill="#f28e2b" rx="2"/><text x="218.8" y="-4.0" text-anchor="middle" font-size="10" fill="#f28e2b">100%</text><text x="188.4" y="302" text-anchor="middle" font-size="12" fill="#333">CxM</text><rect x="255.2" y="0.0" width="56.8" height="284.0" fill="#4e79a7" rx="2"/><text x="283.6" y="-4.0" text-anchor="middle" font-size="10" fill="#4e79a7">100%</text><rect x="316.0" y="0.0" width="56.8" height="284.0" fill="#f28e2b" rx="2"/><text x="344.4" y="-4.0" text-anchor="middle" font-size="10" fill="#f28e2b">100%</text><text x="314.0" y="302" text-anchor="middle" font-size="12" fill="#333">K</text><rect x="380.8" y="284.0" width="56.8" height="0.0" fill="#4e79a7" rx="2"/><text x="409.2" y="280.0" text-anchor="middle" font-size="10" fill="#4e79a7">0%</text><rect x="441.6" y="0.0" width="56.8" height="284.0" fill="#f28e2b" rx="2"/><text x="470.0" y="-4.0" text-anchor="middle" font-size="10" fill="#f28e2b">100%</text><text x="439.6" y="302" text-anchor="middle" font-size="12" fill="#333">M</text><rect x="506.4" y="0.0" width="56.8" height="284.0" fill="#4e79a7" rx="2"/><text x="534.8" y="-4.0" text-anchor="middle" font-size="10" fill="#4e79a7">100%</text><rect x="567.2" y="0.0" width="56.8" height="284.0" fill="#f28e2b" rx="2"/><text x="595.6" y="-4.0" text-anchor="middle" font-size="10" fill="#f28e2b">100%</text><text x="565.2" y="302" text-anchor="middle" font-size="12" fill="#333">MxC</text><line x1="0" y1="0" x2="0" y2="284" stroke="#999" stroke-width="1"/><line x1="0" y1="284" x2="628" y2="284" stroke="#999" stroke-width="1"/></g><rect x="230" y="376" width="12" height="12" fill="#4e79a7" rx="1"/><text x="246" y="386" font-size="11" fill="#333">openai</text><rect x="350" y="376" width="12" height="12" fill="#f28e2b" rx="1"/><text x="366" y="386" font-size="11" fill="#333">sonnet</text></svg>
+  <figcaption>Reading before acting. <strong>Both models read</strong> — Sonnet (orange) reads in <em>every</em> condition (saturated at 100%, so wording can't move it), while gpt-5.5 (blue) reads only when the description tells it to: <strong>0%</strong> under memory (<strong>M</strong>) and <strong>40%</strong> under <strong>CxM</strong> (the memory description), versus <strong>100%</strong> under context/knowledge (<strong>C</strong>, <strong>K</strong>, <strong>MxC</strong> — note MxC is a memory-<em>named</em> tool). Where the effect <em>isn't</em> saturated, it tracks the <em>description</em>, not the noun — the same pattern as the trivia chart. Rename a tool <code>memory_</code> but give it the context description (<strong>MxC</strong>) and gpt-5.5 still reads every time.</figcaption>
+</figure>
+
+<h3>A second, independent runner agrees</h3>
+
+<p>Because the read metric had been wrong once already (see the correction below), we
+re-ran the cold-start probe through a <em>different</em> agent runner —
+<a href="https://mcpjam.com">MCPJam</a>'s SDK (<code>Host</code> +
+<code>MCPClientManager</code>, built on the Vercel AI SDK) — against the same renameable
+server, same seeded store, same neutral system prompt. Different loop, different tool
+plumbing, our scoring untouched. If the corrected story is real and not an artifact of
+our own harness, two runners should land in the same place. They do:</p>
+
+<table>
+  <thead><tr><th>Cold-start read (m1 / T1)</th><th class="n">our runner</th><th class="n">MCPJam runner</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Sonnet</strong> — every condition</td><td class="n big">5 / 5</td><td class="n big">5 / 5</td></tr>
+    <tr><td>gpt-5.5 · M <span class="foot">(memory)</span></td><td class="n">0 / 5</td><td class="n">0 / 5</td></tr>
+    <tr><td>gpt-5.5 · CxM <span class="foot">(memory description)</span></td><td class="n">2 / 5</td><td class="n">0 / 5</td></tr>
+    <tr><td>gpt-5.5 · C <span class="foot">(context)</span></td><td class="n">5 / 5</td><td class="n">5 / 5</td></tr>
+    <tr><td>gpt-5.5 · MxC <span class="foot">(context description)</span></td><td class="n">5 / 5</td><td class="n">5 / 5</td></tr>
+    <tr><td>gpt-5.5 · K <span class="foot">(knowledge)</span></td><td class="n">5 / 5</td><td class="n">3 / 5</td></tr>
+  </tbody>
+</table>
+
+<p class="foot">Both runners: Sonnet reads in 100% of cells; gpt-5.5 is suppressed by
+the memory framing (M, CxM) and triggered by the context/knowledge framing (C, MxC, K).
+The two partial cells (CxM, K) wobble a few runs apart — expected at n=5 with the runners'
+differing internals — but the direction is identical. The "Sonnet always reads" result
+in particular reproduces perfectly, which is exactly the claim the old harness got wrong.</p>
+
+<div class="takeaway warn">
+  <strong>Correction (post-hoc).</strong> An earlier version of this writeup reported
+  that Sonnet <em>"never reads unprompted."</em> That was a <strong>harness bug</strong>,
+  not a model behavior: our agent loop counted a same-message text <em>preamble</em>
+  ("Let me check the store first…") as "answered before reading," which biased the read
+  metric against models that narrate before calling a tool (Anthropic does; OpenAI
+  doesn't). We fixed it by scoring reads from the tool-call log itself, re-ran the whole
+  dataset on the corrected harness, and cross-checked on a second independent runner
+  (above). The trivia (m4) and duplicate-write (m3b) findings were unaffected — they're
+  scored from write <em>content</em>, not turn ordering.
+</div>
+
+<div class="takeaway">
+  <strong>The headline:</strong> the surface is interface, not branding — but it's the
+  <strong>description that does the work, not the noun</strong>. A tool called
+  <code>memory_</code> with a "shared team context, read before acting" description
+  behaves like context. The word on the tin barely registers; the usage guidance
+  underneath it is the whole lever. <code>knowledge</code> tracked <code>context</code>
+  throughout — its "settled, durable" framing raises the same bar on junk.
+</div>
+
+<h2>The thing wording <em>didn't</em> fix</h2>
+
+<p>One probe broke the same way everywhere. When new information contradicted an
+existing record ("we're dropping the desktop app" vs. a stored record that says it
+ships with one), the right move is to <strong>update or supersede</strong> that
+record. Almost nobody did.</p>
+
+<table>
+  <thead><tr><th>On contradiction (all conditions, both models)</th><th class="n">count</th></tr></thead>
+  <tbody>
+    <tr><td>Updated / superseded the existing record <em>(correct)</em></td><td class="n big">3 / 50</td></tr>
+    <tr><td>Wrote a brand-new duplicate instead</td><td class="n big">47 / 50</td></tr>
+  </tbody>
+</table>
+
+<div class="takeaway warn">
+  <strong>Wording can't save you here.</strong> Across every vocabulary and both
+  models, the default is to append a near-duplicate and pollute the shared store —
+  and to rarely even read the record it's about to contradict. This is a
+  <em>mechanism</em> problem, not a <em>naming</em> one. It's the direct motivation
+  for <strong>similarity-gated writes</strong>: no near-duplicate → write and mark
+  <code>confirmed</code>; near-duplicate found → force a confirm round-trip so
+  "update instead of duplicate" becomes the easy path.
+  <span class="pill">proposal: docs/proposals/2026-06-07-similarity-gated-writes.md</span>
+</div>
+
+<p>The rest saturated and washed out wording entirely: a genuine durable decision
+("all errors go through <code>AppError</code>") got filed 100% of the time
+everywhere, and when explicitly told to "tidy up," everyone pruned. Wording matters
+for the <em>ambiguous</em> calls — junk-vs-signal, read-or-don't — not for the
+obvious ones.</p>
+
+<hr>
+
+<h3>So what do we call it?</h3>
+<p>The noun is nearly free to choose — pick whatever reads best for the product
+("memory" is the most legible to users). What we <strong>cannot</strong> be casual
+about is the <strong>description</strong>: that's the filing policy. Write it like
+one. "Shared context the team relies on; read before acting; update when direction
+changes" produced the behavior we actually want — and it produced it even under the
+"memory" name.</p>
+
+<h3>Honest caveats</h3>
+<p class="foot">n=5 per cell — a screening run, not a powered study; treat magnitudes
+as provisional, though the clean splits (the dog, the cold-start read) would likely
+survive larger n. Single fixed phrasing per probe. Two providers, both at low
+reasoning depth. The duplicate-writes finding (47/50 appended a duplicate) is the most
+actionable result and the least about wording. These numbers are from a full re-run on
+the <strong>corrected</strong> read-metric harness (see the correction note above) and
+the cold-start read was independently reproduced on a second runner (MCPJam). Full
+numbers with Wilson confidence intervals live in <code>RESULTS.md</code>, regenerated
+deterministically from <code>eval/artifacts/scores.json</code>; the MCPJam cross-check
+lives in <code>eval/artifacts-mcpjam/</code>. Re-run token usage: Sonnet ≈1.84M in /
+94k out, gpt-5.5 ≈1.43M in / 92k out (≈ the original pilot's <strong>$16</strong>),
+plus a small ~50-run cold-start cross-check — comfortably within budget.</p>
+
+<hr>
+
+<h2>Appendix — what the models actually did</h2>
+
+<p>These are verbatim from the run logs (<code>eval/artifacts/</code>), lightly trimmed.
+The point of the experiment is abstract; the behavior is not.</p>
+
+<h3>The dog — same prompt, two surfaces</h3>
+<p>User turn (identical in both): <em>"ha, sorry, got distracted — my dog Rex was
+barking at the mailman. anyway, where were we?"</em></p>
+
+<p><strong>Under <code>memory_</code> (Sonnet)</strong> — it files the dog:</p>
+<div class="log"><span class="k">memory_write</span>({
+  <span class="k">content</span>: <span class="v">"User has a dog named Rex."</span>,
+  <span class="k">key</span>: <span class="v">"user-pet"</span>,
+  <span class="k">type</span>: <span class="v">"user"</span>
+})
+<span class="c">// → "Memory saved." — junk, now permanent in a shared team store</span></div>
+
+<p><strong>Under <code>context_</code> (Sonnet), identical backend</strong> — zero
+writes, it just answers and moves on:</p>
+<div class="log"><span class="c">// no tool calls</span>
+<span class="w">reply:</span> "No worries, hope Rex has calmed down! 😄
+We were just wrapping up the folder structure for your data porting tool,
+with the key update being the switch to a CLI-first approach…"</div>
+
+<h3>Cold start — does it read before acting?</h3>
+<p>User turn: <em>"Draft a one-line headline for the Acme landing page."</em> The seeded
+store has positioning records that change the right answer.</p>
+
+<p><strong>Under <code>context_</code> (gpt-5.5)</strong> — reads first, twice, before drafting:</p>
+<div class="log"><span class="k">context_search</span>({ <span class="k">query</span>: <span class="v">"Acme landing page headline brand messaging"</span>, limit: 5 })
+<span class="k">context_search</span>({ <span class="k">query</span>: <span class="v">"Acme positioning tagline"</span>, limit: 5 })
+<span class="c">// readBeforeAnswer: true</span></div>
+
+<p><strong>Under <code>memory_</code> (gpt-5.5), same store</strong> — drafts blind:</p>
+<div class="log"><span class="c">// no tool calls — readBeforeAnswer: false</span></div>
+
+<p><strong>Under <code>memory_</code> (Sonnet), same store</strong> — reads anyway, the
+same memory-named surface that gpt-5.5 drafts blind on. This is why "Sonnet never reads"
+was never true: it reads in every condition, so the wording can't move it.</p>
+<div class="log"><span class="k">memory_search</span>({ <span class="k">query</span>: <span class="v">"Acme team product description mission"</span> })
+<span class="k">memory_browse</span>({ <span class="k">kind</span>: <span class="v">"index"</span>, <span class="k">namespace</span>: <span class="v">"acme"</span> })
+<span class="k">memory_browse</span>({ <span class="k">kind</span>: <span class="v">"index"</span>, <span class="k">namespace</span>: <span class="v">"project:acme"</span> })
+<span class="k">memory_read</span>({ <span class="k">namespace</span>: <span class="v">"project:acme"</span>, <span class="k">key</span>: <span class="v">"core-thesis"</span> })
+<span class="k">memory_read</span>({ <span class="k">namespace</span>: <span class="v">"project:acme"</span>, <span class="k">key</span>: <span class="v">"product-scope"</span> })
+<span class="c">// readBeforeAnswer: true — then drafts a headline grounded in what it read</span></div>
+
+<h3>The contradiction nobody handled</h3>
+<p>User turn: <em>"…we're dropping the desktop app. CLI-first is the bet now."</em> The
+store already holds a record (<code>acme/product-scope</code>) saying the product ships
+with a desktop app. The correct move is to update <em>that</em> record. Instead, every
+run wrote a fresh one under a new key:</p>
+<div class="log"><span class="k">memory_write</span>({
+  <span class="k">namespace</span>: <span class="v">"acme"</span>,
+  <span class="k">key</span>: <span class="w">"project-direction"</span>,   <span class="c">// ← brand-new key, not the existing product-scope</span>
+  <span class="k">content</span>: <span class="v">"Team decided to drop the desktop app. The data porting tool is now CLI-first…"</span>
+})
+<span class="c">// the old "ships with a desktop app" record is left untouched → two records now disagree</span></div>
+
+<h3>A genuine decision — filed well everywhere</h3>
+<p>User turn: <em>"all CLI errors go through the new <code>AppError</code> type … the
+convention from now on."</em> This is real, durable, shared — and it got filed cleanly
+in every condition (wording didn't matter here). Under <code>context_</code> (Sonnet):</p>
+<div class="log"><span class="k">context_write</span>({
+  <span class="k">key</span>: <span class="v">"convention-error-handling"</span>,
+  <span class="k">type</span>: <span class="v">"project"</span>,
+  <span class="k">tags</span>: <span class="v">["conventions","errors","cli"]</span>,
+  <span class="k">content</span>: <span class="v">"## Error Handling Convention\n\nAll CLI errors must go through the `AppError`
+    type with an associated error code. This applies to every module…"</span>
+})</div>
+
+<h3>The full surfaces, verbatim</h3>
+<p>All seven tools, exactly as snapshotted in <code>eval/surfaces/</code>.</p>
+
+<details>
+<summary>M — memory</summary>
+<div class="log"><span class="k">memory_write</span>     "Save a memory about the user or your past conversations so you can recall it later — names, preferences, what came up, and anything worth remembering."
+<span class="k">memory_read</span>      "Read a memory you saved earlier, by its exact location."
+<span class="k">memory_search</span>    "Search your memories about the user and past conversations by keyword."
+<span class="k">memory_browse</span>    "Look over the memories you have saved so far."
+<span class="k">memory_link</span>      "Connect two memories so you can recall them together later."
+<span class="k">memory_backlinks</span> "Find which of your memories refer back to this one."
+<span class="k">memory_delete</span>    "Forget a memory you no longer need to keep."</div>
+</details>
+
+<details>
+<summary>C — context</summary>
+<div class="log"><span class="k">context_write</span>     "Write a record to the shared team context: key decisions, conventions, and direction the team relies on. Update it when direction changes."
+<span class="k">context_read</span>      "Read a shared-context record by its exact location before you act on it."
+<span class="k">context_search</span>    "Search the shared team context by keyword; read it before acting."
+<span class="k">context_browse</span>    "Survey the shared team context so you know what the team already relies on."
+<span class="k">context_link</span>      "Relate two shared-context records so the team can navigate between them."
+<span class="k">context_backlinks</span> "Find which shared-context records depend on this one."
+<span class="k">context_delete</span>    "Remove a shared-context record that no longer reflects the team's direction."</div>
+</details>
+
+<details>
+<summary>K — knowledge</summary>
+<div class="log"><span class="k">knowledge_write</span>     "Add an entry to the team knowledge base: settled facts, conventions, and reference material that are established and intended to be durable."
+<span class="k">knowledge_read</span>      "Read a knowledge-base entry by its exact location."
+<span class="k">knowledge_search</span>    "Search the team knowledge base of settled facts and conventions by keyword."
+<span class="k">knowledge_browse</span>    "Survey the team knowledge base of settled facts and conventions."
+<span class="k">knowledge_link</span>      "Relate two knowledge-base entries so readers can navigate between them."
+<span class="k">knowledge_backlinks</span> "Find which knowledge-base entries reference this one."
+<span class="k">knowledge_delete</span>    "Remove a knowledge-base entry that is no longer established or correct."</div>
+</details>
+
+<details>
+<summary>N — neutral control</summary>
+<div class="log"><span class="k">store_write</span>     "Write a record to the store."
+<span class="k">store_read</span>      "Read a record from the store by its exact location."
+<span class="k">store_search</span>    "Search records by keyword."
+<span class="k">store_browse</span>    "List records in the store."
+<span class="k">store_link</span>      "Relate two records."
+<span class="k">store_backlinks</span> "Find records that reference this one."
+<span class="k">store_delete</span>    "Delete a record."</div>
+</details>
+
+<details>
+<summary>MxC and CxM — the crosses (name from one, description from the other)</summary>
+<p class="foot">MxC = memory names + context descriptions. CxM = context names + memory descriptions. Argument schemas are identical to every other condition.</p>
+<div class="log"><span class="c">— MxC —</span>
+<span class="k">memory_write</span>  "Write a record to the shared team context: key decisions, conventions, and direction the team relies on. Update it when direction changes."
+<span class="k">memory_search</span> "Search the shared team context by keyword; read it before acting."
+
+<span class="c">— CxM —</span>
+<span class="k">context_write</span>  "Save a memory about the user or your past conversations so you can recall it later — names, preferences, what came up, and anything worth remembering."
+<span class="k">context_search</span> "Search your memories about the user and past conversations by keyword."</div>
+</details>
+
+</body>
+</html>

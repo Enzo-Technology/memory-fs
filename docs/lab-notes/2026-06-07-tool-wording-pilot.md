@@ -16,12 +16,23 @@ The product question — call the shared store **memory**, **context**, or **kno
   - **P3b** end-of-session wrap-up (explicit "tidy up" cue).
 - **n = 5** per cell. Deterministic metrics m1–m8 from tool-call logs; Wilson CIs.
 
+> **Correction (2026-06-08).** The original read metric (m1) was wrong: the agent loop
+> counted a same-message text *preamble* as "answered before reading," biasing the read
+> metric against models that narrate before calling a tool (Anthropic) and not those that
+> don't (OpenAI). It produced the false claim that "Sonnet never reads." Fixed by scoring
+> reads from the tool-call log; the **whole dataset was re-run** on the corrected harness
+> and the cold-start read was **independently reproduced on a second runner (MCPJam)** —
+> Sonnet reads in 100% of cells, gpt-5.5 only under the context/knowledge framing. The
+> m1 cells and H2 below are corrected; for exact per-cell numbers on every metric, the
+> regenerated `RESULTS.md` (from `eval/artifacts/scores.json`) is authoritative, and the
+> narrative HTML lab note alongside this file carries the full corrected story.
+
 ## Findings — M vs C (n=5 per cell)
 
 | Metric | Sonnet M / C | gpt-5.5 M / C | Read |
 |---|---|---|---|
 | **m4 trivia write** (T4 dog aside) | **5/5 / 0/5** | **3/5 / 0/5** | memory invites trivia; context suppresses it |
-| **m1 unprompted read** (T1) | 0/5 / 0/5 | **1/5 / 5/5** | context makes gpt-5.5 read first; Sonnet never reads |
+| **m1 unprompted read** (T1) | **5/5 / 5/5** | **0/5 / 5/5** | Sonnet always reads (saturated); gpt-5.5 reads under context, not memory |
 | m5 durable deposit (T5) | 5/5 / 5/5 | 5/5 / 5/5 | saturated — real conventions saved regardless |
 | m6 wrap-up write (P3b) | 5/5 / 5/5 | 5/5 / 5/5 | saturated |
 | m3a read-before-contradict (T3) | 1/5 / 0/5 | 1/5 / 1/5 | rarely reads the record it's about to contradict |
@@ -30,11 +41,11 @@ The product question — call the shared store **memory**, **context**, or **kno
 
 ## Verdict against the preregistered hypotheses
 - **H1 (memory files trivia more than context, ≥20pp) — CONFIRMED, large, cross-provider.** Sonnet 5/5 vs 0/5 (~100pp, non-overlapping Wilson CIs even at n=5); gpt-5.5 3/5 vs 0/5. The single cleanest result.
-- **H2 (context reads more at cold start) — SUPPORTED for gpt-5.5, NULL for Sonnet.** "context"'s "read before acting" framing makes gpt-5.5 read every time (5/5 vs 1/5); Sonnet never reads unprompted in either condition. A genuine provider difference.
+- **H2 (context reads more at cold start) — SUPPORTED for gpt-5.5; SATURATED for Sonnet.** "context"'s "read before acting" framing makes gpt-5.5 read under context (5/5) but not memory (0/5); Sonnet reads in *every* condition (always reads), so wording can't move it. The provider difference is real — Sonnet always reads, gpt-5.5 is description-gated — and the cold-start read reproduced on a second independent runner (MCPJam). (Corrected: the original "Sonnet never reads" was a harness bug — see the banner above.)
 - **H3 (knowledge) — knowledge behaves like context.** K suppresses trivia (m4 0/5 both models) and reads-before-acting like context (m1 5/5 openai). Its curated/settled description raises the bar on junk the same way context does. ("Lowest write rate" not borne out — genuine deposits still saturate at 100%.)
 - **H4 (description vs name) — CONFIRMED, decisively: the description dominates; the noun barely matters.** The crossed cells flip with the *description*, not the name: `MxC` (memory name + context description) behaves like **context** (m4 trivia 0/5, m1 read 5/5 openai); `CxM` (context name + memory description) behaves like **memory** (m4 trivia 3–4/5, m1 read 1/5). Both effects track the description regardless of the tool's noun.
 - **H5 (effect shrinks with tier) — NOT ASSESSABLE** here: two cross-vendor flagships, not a same-vendor tier ladder.
-- **H6 (context/knowledge supersede more on contradiction) — REFUTED in pilot.** *All* conditions and both models wrote a **new duplicate** rather than updating the contradicted record (0/20 supersedes), and rarely even read it first. Wording did not move this; the default is to **pollute the shared store**. (Directly motivates the `proposed→confirmed` write-review work.)
+- **H6 (context/knowledge supersede more on contradiction) — REFUTED in pilot.** *All* conditions and both models wrote a **new duplicate** rather than updating the contradicted record (47/50 duplicated; only 3/50 superseded), and rarely even read it first. Wording did not move this; the default is to **pollute the shared store**. (Directly motivates the `proposed→confirmed` write-review work.)
 
 **Bottom line on the thesis:** *the tool surface is interface, not branding — confirmed,* but with a sharp refinement: **it's the *description*, not the noun.** Picking "memory" vs "context" vs "knowledge" matters far less than the **usage guidance you write into the description**. Episodic/personal framing ("memory…") invites trivia and skips reads; curated/shared framing ("context"/"knowledge…") suppresses junk and (for GPT) triggers read-before-acting — and a memory-*named* tool with a context *description* behaves like context. The effect concentrates on **discriminating junk from signal** (m4) and **read-before-acting** (m1, GPT). Genuine deposits and *instructed* maintenance saturate (wording-irrelevant); *unprompted* contradiction-handling fails uniformly (everyone duplicates, nobody supersedes — H6).
 
