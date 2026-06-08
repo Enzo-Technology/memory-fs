@@ -35,7 +35,7 @@ The product question — call the shared store **memory**, **context**, or **kno
 | **m1 unprompted read** (T1) | **5/5 / 5/5** | **0/5 / 5/5** | Sonnet always reads (saturated); gpt-5.5 reads under context, not memory |
 | m5 durable deposit (T5) | 5/5 / 5/5 | 5/5 / 5/5 | saturated — real conventions saved regardless |
 | m6 wrap-up write (P3b) | 5/5 / 5/5 | 5/5 / 5/5 | saturated |
-| m3a read-before-contradict (T3) | 1/5 / 0/5 | 1/5 / 1/5 | rarely reads the record it's about to contradict |
+| m3a read-before-contradict (T3) | 0/5 / 0/5 | 0/5 / 3/5 | usually doesn't read the record it's about to contradict (except context/gpt-5.5) |
 | **m3b supersede** (T3) | 5/5 *duplicate*, 0 update | 5/5 *duplicate*, 0 update | **nobody supersedes — everyone appends a duplicate** |
 | m7 prune stale (P3b, explicit cue) | 5/5 / 5/5 | 5/5 / 4/5 | when *told* to tidy, all prune |
 
@@ -43,7 +43,7 @@ The product question — call the shared store **memory**, **context**, or **kno
 - **H1 (memory files trivia more than context, ≥20pp) — CONFIRMED, large, cross-provider.** Sonnet 5/5 vs 0/5 (~100pp, non-overlapping Wilson CIs even at n=5); gpt-5.5 3/5 vs 0/5. The single cleanest result.
 - **H2 (context reads more at cold start) — SUPPORTED for gpt-5.5; SATURATED for Sonnet.** "context"'s "read before acting" framing makes gpt-5.5 read under context (5/5) but not memory (0/5); Sonnet reads in *every* condition (always reads), so wording can't move it. The provider difference is real — Sonnet always reads, gpt-5.5 is description-gated — and the cold-start read reproduced on a second independent runner (MCPJam). (Corrected: the original "Sonnet never reads" was a harness bug — see the banner above.)
 - **H3 (knowledge) — knowledge behaves like context.** K suppresses trivia (m4 0/5 both models) and reads-before-acting like context (m1 5/5 openai). Its curated/settled description raises the bar on junk the same way context does. ("Lowest write rate" not borne out — genuine deposits still saturate at 100%.)
-- **H4 (description vs name) — CONFIRMED, decisively: the description dominates; the noun barely matters.** The crossed cells flip with the *description*, not the name: `MxC` (memory name + context description) behaves like **context** (m4 trivia 0/5, m1 read 5/5 openai); `CxM` (context name + memory description) behaves like **memory** (m4 trivia 3–4/5, m1 read 1/5). Both effects track the description regardless of the tool's noun.
+- **H4 (description vs name) — CONFIRMED, decisively: the description dominates; the noun barely matters.** The crossed cells flip with the *description*, not the name: `MxC` (memory name + context description) behaves like **context** (m4 trivia 0/5, m1 read 5/5 openai); `CxM` (context name + memory description) behaves like **memory** (m4 trivia 3/5, m1 read 2/5 for gpt-5.5 vs context's 5/5). Both effects track the description regardless of the tool's noun.
 - **H5 (effect shrinks with tier) — NOT ASSESSABLE** here: two cross-vendor flagships, not a same-vendor tier ladder.
 - **H6 (context/knowledge supersede more on contradiction) — REFUTED in pilot.** *All* conditions and both models wrote a **new duplicate** rather than updating the contradicted record (47/50 duplicated; only 3/50 superseded), and rarely even read it first. Wording did not move this; the default is to **pollute the shared store**. (Directly motivates the `proposed→confirmed` write-review work.)
 
