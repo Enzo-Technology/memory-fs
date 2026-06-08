@@ -1,4 +1,5 @@
-// The 50px lens row: the four P1 lenses (Tags is P2) and the running total pinned right. Selecting
+// The 50px lens row: the five lenses (Namespaces/All/Recent/Hubs/Orphans; Tags is P2) and the
+// running total pinned right. Selecting
 // a lens swaps what populates the tree pane; it never changes the layout. Props only.
 // Styling: .lensrow / .lens.
 import type { Lens } from "./api";
