@@ -85,6 +85,9 @@ export function makeOpenAIClient(modelId) {
             "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
           },
           body: JSON.stringify(body),
+          // Raw fetch has no built-in timeout (unlike the Anthropic SDK); a stalled
+          // request would hang the whole run. Abort after 90s → iteration excluded.
+          signal: AbortSignal.timeout(90000),
         });
         if (!resp.ok) {
           const text = await resp.text();
