@@ -438,6 +438,29 @@ body,
   max-width: none;
 }
 
+/* inline wikilinks in the body: green + navigable, or muted when dangling */
+.wikilink {
+  font: inherit;
+  color: var(--accent);
+  font-weight: 600;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.wikilink:hover {
+  color: var(--accent-ink);
+  text-decoration: underline;
+}
+.wikilink--dangling {
+  color: var(--ink-4);
+  font-weight: 500;
+  cursor: default;
+}
+.wikilink--dangling:hover {
+  text-decoration: none;
+}
+
 /* related: two columns, hairline top */
 .reader__rel {
   display: grid;
