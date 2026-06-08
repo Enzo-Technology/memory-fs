@@ -1,4 +1,4 @@
-// The 50px lens row: the five lenses (Namespaces/All/Recent/Hubs/Orphans; Tags is P2) and the
+// The 50px lens row: the lenses (Namespaces/All/Recent/Hubs/Orphans/Tags) and the
 // running total pinned right. Selecting
 // a lens swaps what populates the tree pane; it never changes the layout. Props only.
 // Styling: .lensrow / .lens.
@@ -10,6 +10,7 @@ const LENSES: { id: Lens; label: string }[] = [
   { id: "recent", label: "Recent" },
   { id: "hubs", label: "Hubs" },
   { id: "orphans", label: "Orphans" },
+  { id: "tags", label: "Tags" },
 ];
 
 export function LensRow({
