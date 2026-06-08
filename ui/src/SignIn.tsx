@@ -32,10 +32,11 @@ export function SignIn() {
     );
   }
 
-  // Not signed in. callbackURL resumes the OAuth flow if we're mid-authorize, else
-  // lands on the app home. Dedicated centered card (not the generic Shell) so the entry
-  // screen gets the Foundations treatment.
-  const callbackURL = resume ?? "/";
+  // Not signed in. callbackURL resumes the OAuth flow if we're mid-authorize, else returns to the
+  // address that 401'd (api.ts sets ?next=), else the app home. Dedicated centered card (not the
+  // generic Shell) so the entry screen gets the Foundations treatment.
+  const next = new URLSearchParams(location.search).get("next");
+  const callbackURL = resume ?? next ?? "/";
   return (
     <main className="signin">
       <div className="signin__card">

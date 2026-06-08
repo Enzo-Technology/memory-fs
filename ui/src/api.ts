@@ -11,9 +11,11 @@ export type Lens = "namespaces" | "all" | "tags" | FlatLens;
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(path, { credentials: "include" });
-  // The API 401s when the session is absent/expired; bounce to sign-in (private surface).
+  // The API 401s when the session is absent/expired; bounce to sign-in (private surface),
+  // carrying the current address so re-auth returns the user to the same memory.
   if (res.status === 401) {
-    location.href = "/sign-in";
+    const next = encodeURIComponent(location.pathname + location.search);
+    location.href = "/sign-in?next=" + next;
     throw new Error("unauthenticated");
   }
   if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
