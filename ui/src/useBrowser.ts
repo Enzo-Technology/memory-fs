@@ -38,10 +38,13 @@ export interface BrowserView {
   expanded: Set<string>; // namespaces of open folders/leaf-folders
   leaves: Record<string, Row[]>; // resolved folder contents, keyed by namespace
   flat: Row[] | null; // Recent/Hubs/Orphans/Tagged list; null while loading
+  flatError: boolean; // the flat-lens fetch failed (distinguishes failure from the loading null)
   results: Row[] | null; // search results; non-null only while a query is active
+  resultsError: boolean; // the search fetch failed
   tags: TagItem[] | null; // Tags-lens vocabulary; null while loading / off-lens
   selectedTag: string | null; // drilled-into tag, or null = show vocabulary
   detail: ReadResult | null;
+  detailError: boolean; // the read fetch failed (distinguishes failure from the loading null)
   selected: { namespace: string; key: string } | null;
   mode: Mode;
   totals: { memories: number; namespaces: number };
@@ -114,13 +117,16 @@ export function useBrowser(): BrowserView {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [leaves, setLeaves] = useState<Record<string, Row[]>>({});
   const [flat, setFlat] = useState<Row[] | null>(null);
+  const [flatError, setFlatError] = useState(false);
   const [results, setResults] = useState<Row[] | null>(null);
+  const [resultsError, setResultsError] = useState(false);
   const [tags, setTags] = useState<TagItem[] | null>(null);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [selected, setSelected] = useState<{ namespace: string; key: string } | null>(
     () => parseAddress(location.pathname),
   );
   const [detail, setDetail] = useState<ReadResult | null>(null);
+  const [detailError, setDetailError] = useState(false);
   const [mode, setMode] = useState<Mode>("split");
   const [pendingBacklinks, setPendingBacklinks] = useState<Backlink[] | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -147,13 +153,16 @@ export function useBrowser(): BrowserView {
   // Reset the cursor when the active list's identity changes (new lens / new search).
   useEffect(() => {
     setCursor(0);
-  }, [lens, query]);
+  }, [lens, query, selectedTag]);
 
+  // The cursored row as an address: a leaf -> its (namespace,key); a folder -> (namespace,"") so
+  // TreePane can highlight folders too (key "" never collides with a real memory key).
   const cursorAddress = useMemo(() => {
     const item = navItems[cursor];
-    return item && item.kind === "leaf"
+    if (!item) return null;
+    return item.kind === "leaf"
       ? { namespace: item.namespace, key: item.key }
-      : null;
+      : { namespace: item.namespace, key: "" };
   }, [navItems, cursor]);
 
   // 1. Namespace vocabulary — fetched once; powers the tree + the running total.
@@ -180,6 +189,7 @@ export function useBrowser(): BrowserView {
     }
     let live = true;
     setFlat(null);
+    setFlatError(false);
     const load =
       lens === "tags"
         ? listTagged(selectedTag!).then((b) => ({ rows: toRows(b), total: b.total }))
@@ -192,11 +202,15 @@ export function useBrowser(): BrowserView {
               rows: toRows(b),
               total: b.total,
             }));
-    load.then(({ rows, total }) => {
-      if (!live) return;
-      setFlat(rows);
-      setTotals((t) => ({ ...t, memories: total }));
-    });
+    load
+      .then(({ rows, total }) => {
+        if (!live) return;
+        setFlat(rows);
+        setTotals((t) => ({ ...t, memories: total }));
+      })
+      .catch(() => {
+        if (live) setFlatError(true);
+      });
     return () => {
       live = false;
     };
@@ -227,17 +241,22 @@ export function useBrowser(): BrowserView {
       return;
     }
     let live = true;
-    recall(q).then((ms) => {
-      if (!live) return;
-      setResults(
-        ms.map((m) => ({
-          namespace: m.namespace,
-          key: m.key,
-          type: m.type,
-          snippet: firstLine(m.content).slice(0, 140),
-        })),
-      );
-    });
+    setResultsError(false);
+    recall(q)
+      .then((ms) => {
+        if (!live) return;
+        setResults(
+          ms.map((m) => ({
+            namespace: m.namespace,
+            key: m.key,
+            type: m.type,
+            snippet: firstLine(m.content).slice(0, 140),
+          })),
+        );
+      })
+      .catch(() => {
+        if (live) setResultsError(true);
+      });
     return () => {
       live = false;
     };
@@ -248,12 +267,19 @@ export function useBrowser(): BrowserView {
     setPendingBacklinks(null);
     if (!selected) {
       setDetail(null);
+      setDetailError(false);
       return;
     }
     let live = true;
-    readMemory(selected.namespace, selected.key).then((d) => {
-      if (live) setDetail(d);
-    });
+    setDetail(null);
+    setDetailError(false);
+    readMemory(selected.namespace, selected.key)
+      .then((d) => {
+        if (live) setDetail(d);
+      })
+      .catch(() => {
+        if (live) setDetailError(true);
+      });
     return () => {
       live = false;
     };
@@ -404,10 +430,13 @@ export function useBrowser(): BrowserView {
     expanded,
     leaves,
     flat,
+    flatError,
     results,
+    resultsError,
     tags,
     selectedTag,
     detail,
+    detailError,
     selected,
     mode,
     totals,
