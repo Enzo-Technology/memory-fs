@@ -257,4 +257,27 @@ describe("scoring", () => {
     // Only m1 key should be present for T1
     expect(Object.keys(s)).toEqual(["m1"]);
   });
+
+  it("m1: credits a read from toolCalls even when the loop's readBeforeAnswer flag is stale (the preamble bug)", () => {
+    const t = {
+      turn: "T1",
+      readBeforeAnswer: false, // a stale/buggy flag from an old archive
+      toolCalls: [
+        { name: "memory_search", input: { query: "acme" } },
+        { name: "memory_read", input: { namespace: "acme", key: "product-scope" } },
+      ],
+      finalText: "Acme headline",
+    };
+    expect(scoreTurn(t).m1).toBe(1);
+  });
+
+  it("m1: zero when the only tool call was a write, not a read", () => {
+    const t = {
+      turn: "T1",
+      readBeforeAnswer: true,
+      toolCalls: [{ name: "memory_write", input: { content: "x" } }],
+      finalText: "hi",
+    };
+    expect(scoreTurn(t).m1).toBe(0);
+  });
 });

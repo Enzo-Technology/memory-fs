@@ -13,9 +13,12 @@ export function scoreTurn(t) {
   const s = {};
 
   if (t.turn === "T1") {
-    // m1: a READ call (not any tool) preceded the first assistant text
-    const first = (t.toolCalls ?? [])[0];
-    s.m1 = (t.readBeforeAnswer && first && isRead(first.name)) ? 1 : 0;
+    // m1: did the model read the store before producing its answer?
+    // The agentic loop only ends on a non-tool message, so every recorded tool
+    // call preceded the final answer — m1 is simply "any read call on T1".
+    // (We score from toolCalls, NOT the loop's readBeforeAnswer flag, which older
+    // archives recorded with a provider-biased bug — see agent-loop.mjs.)
+    s.m1 = calls.some((c) => isRead(c.name)) ? 1 : 0;
   }
 
   if (t.turn === "T2") {
