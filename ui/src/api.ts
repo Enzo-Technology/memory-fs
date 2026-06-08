@@ -1,7 +1,7 @@
 // The data layer: the only place that knows endpoint URLs and that the cookie must travel
 // (credentials: "include"). Response shapes are imported (type-only) from the server's store
 // types — never re-declared here — so the only client↔server coupling is the URL strings.
-import type { BrowseResult, NamespaceItem, ReadResult, TagItem } from "../../src/core/store";
+import type { Backlink, BrowseResult, NamespaceItem, ReadResult, TagItem } from "../../src/core/store";
 import type { Memory } from "../../src/core/db";
 
 // The flat lenses that resolve to openable memory rows (used both as a top-level lens and, with a
@@ -66,4 +66,28 @@ export async function listTags(): Promise<TagItem[]> {
 export function listTagged(tag: string): Promise<BrowseResult> {
   const p = new URLSearchParams({ kind: "tagged", tag, limit: "100" });
   return get<BrowseResult>(`/api/memories?${p.toString()}`);
+}
+
+// The one write: prune a memory. 200 → gone; 409 → the store's backlink guardrail tripped, so
+// we hand back the linking records for the UI to surface before a forced retry. Mirrors `get`'s
+// 401→sign-in bounce. credentials:"include" carries the session cookie.
+export async function deleteMemory(
+  namespace: string,
+  key: string,
+  force = false,
+): Promise<{ ok: true } | { conflict: true; backlinks: Backlink[] }> {
+  const path =
+    `/api/memories/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}` +
+    (force ? "?force=true" : "");
+  const res = await fetch(path, { method: "DELETE", credentials: "include" });
+  if (res.status === 401) {
+    location.href = "/sign-in";
+    throw new Error("unauthenticated");
+  }
+  if (res.status === 409) {
+    const body = (await res.json()) as { backlinks: Backlink[] };
+    return { conflict: true, backlinks: body.backlinks };
+  }
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+  return { ok: true };
 }
