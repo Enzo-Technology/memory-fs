@@ -12,6 +12,7 @@ const BROWSE_KINDS = new Set<BrowseKind>([
   "hubs",
   "orphans",
   "tags",
+  "tagged",
   "namespaces",
 ]);
 
@@ -97,6 +98,7 @@ export function makeBrowseApi(store: MemoryStore, requireSession: RequireSession
           namespace: q.get("namespace") ?? undefined,
           prefix: q.get("prefix") ?? undefined,
           limit: num(q.get("limit")),
+          tag: q.get("tag") ?? undefined,
         }),
       );
     }

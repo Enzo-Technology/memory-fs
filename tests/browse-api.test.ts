@@ -64,6 +64,32 @@ describe("browse-api", () => {
     expect(out.status).toBe(400);
   });
 
+  it("kind=tagged returns the tagged shape filtered by tag", async () => {
+    const store = freshStore();
+    store.note({ namespace: "ns", key: "a", content: "alpha", tags: ["decision"] });
+    store.note({ namespace: "ns", key: "b", content: "beta", tags: ["auth"] });
+    const out = await call(store, withSession, "/api/memories?kind=tagged&tag=decision");
+    expect(out.status).toBe(200);
+    const body = JSON.parse(out.body!);
+    expect(body.kind).toBe("tagged");
+    expect(body.items.map((i: { key: string }) => i.key)).toEqual(["a"]);
+  });
+
+  it("kind=tags (vocabulary) still returns tag counts", async () => {
+    const store = freshStore();
+    store.note({ namespace: "ns", key: "a", content: "x", tags: ["decision"] });
+    const out = await call(store, withSession, "/api/memories?kind=tags");
+    expect(out.status).toBe(200);
+    const body = JSON.parse(out.body!);
+    expect(body.kind).toBe("tags");
+    expect(body.items[0].tag).toBe("decision");
+  });
+
+  it("401 on kind=tagged with no session", async () => {
+    const out = await call(freshStore(), noSession, "/api/memories?kind=tagged&tag=x");
+    expect(out.status).toBe(401);
+  });
+
   it("400 when recall q is missing", async () => {
     const out = await call(freshStore(), withSession, "/api/memories/recall");
     expect(out.status).toBe(400);
