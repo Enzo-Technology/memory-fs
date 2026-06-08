@@ -83,7 +83,8 @@ export async function deleteMemory(
     (force ? "?force=true" : "");
   const res = await fetch(path, { method: "DELETE", credentials: "include" });
   if (res.status === 401) {
-    location.href = "/sign-in";
+    const next = encodeURIComponent(location.pathname + location.search);
+    location.href = "/sign-in?next=" + next;
     throw new Error("unauthenticated");
   }
   if (res.status === 409) {
