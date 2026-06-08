@@ -49,7 +49,9 @@ export function TreePane({
   expanded: Set<string>;
   leaves: Record<string, Row[]>;
   flat: Row[] | null;
+  flatError: boolean;
   results: Row[] | null;
+  resultsError: boolean;
   selected: Selected;
   cursorAddress: Selected;
   tags: TagItem[] | null;
@@ -71,7 +73,7 @@ export function TreePane({
         )}
       </div>
       <div className="tree__body">
-        {renderBody({ lens, query, tree, expanded, leaves, flat, results, selected, cursorAddress, tags, selectedTag, onToggle, onOpen, onSelectTag, onClearTag })}
+        {renderBody({ lens, query, tree, expanded, leaves, flat, flatError, results, resultsError, selected, cursorAddress, tags, selectedTag, onToggle, onOpen, onSelectTag, onClearTag })}
       </div>
     </aside>
   );
@@ -84,7 +86,9 @@ function renderBody(p: {
   expanded: Set<string>;
   leaves: Record<string, Row[]>;
   flat: Row[] | null;
+  flatError: boolean;
   results: Row[] | null;
+  resultsError: boolean;
   selected: Selected;
   cursorAddress: Selected;
   tags: TagItem[] | null;
@@ -96,6 +100,8 @@ function renderBody(p: {
 }) {
   // Search results take precedence whenever a query is active.
   if (p.query.trim()) {
+    if (p.resultsError)
+      return <p className="tree__error">Couldn&apos;t load results — retry?</p>;
     if (!p.results) return <div className="tree__skeleton">…</div>;
     if (p.results.length === 0)
       return <p className="tree__empty">No matches. Try a broader term.</p>;
@@ -165,6 +171,8 @@ function renderBody(p: {
   }
 
   // A flat lens (Recent / Hubs / Orphans).
+  if (p.flatError)
+    return <p className="tree__error">Couldn&apos;t load — retry?</p>;
   if (!p.flat) return <div className="tree__skeleton">…</div>;
   if (p.flat.length === 0) return <p className="tree__empty">{emptyLensMessage(p.lens)}</p>;
   return p.flat.map((r) => (

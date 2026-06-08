@@ -99,16 +99,24 @@ export function Browser({
             expanded={vm.expanded}
             leaves={vm.leaves}
             flat={vm.flat}
+            flatError={vm.flatError}
             results={vm.results}
+            resultsError={vm.resultsError}
             selected={vm.selected}
             cursorAddress={vm.cursorAddress}
+            tags={vm.tags}
+            selectedTag={vm.selectedTag}
             onToggle={vm.toggleFolder}
             onOpen={vm.open}
             onExpandAll={vm.expandAll}
+            onSelectTag={(tag) => vm.selectTag(tag)}
+            onClearTag={() => vm.selectTag(null)}
           />
         )}
         <Reader
           detail={vm.detail}
+          detailError={vm.detailError}
+          selected={!!vm.selected}
           mode={vm.mode}
           empty={emptyReader}
           onNavigate={vm.open}

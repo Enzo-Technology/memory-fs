@@ -15,6 +15,8 @@ export function Reader({
   detail,
   mode,
   empty,
+  detailError,
+  selected,
   onNavigate,
   onDrill,
   onShowTree,
@@ -22,14 +24,22 @@ export function Reader({
   detail: ReadResult | null;
   mode: Mode;
   empty: string;
+  detailError: boolean;
+  selected: boolean;
   onNavigate: (namespace: string, key: string) => void;
   onDrill: () => void;
   onShowTree: () => void;
 }) {
   if (!detail) {
+    // Three empty-ish states: a failed read, a memory still loading, or nothing selected.
+    const message = detailError
+      ? "Couldn't load this memory — retry?"
+      : selected
+        ? "Loading…"
+        : empty;
     return (
       <section className="reader reader--empty">
-        <p>{empty}</p>
+        <p>{message}</p>
       </section>
     );
   }

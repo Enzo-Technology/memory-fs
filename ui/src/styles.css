@@ -234,6 +234,12 @@ body,
   padding: var(--s-4);
   color: var(--ink-4);
 }
+.tree__error {
+  padding: var(--s-5) var(--s-4);
+  font-size: 13px;
+  color: var(--ink-3);
+  line-height: 1.6;
+}
 
 /* tree rows (folders + leaves): 32px, 20px indent/depth */
 .trow {
