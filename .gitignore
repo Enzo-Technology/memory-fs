@@ -11,3 +11,4 @@ dist
 eval/results/*.json
 eval/results/SUMMARY.*
 eval/artifacts/
+eval/artifacts-mcpjam/
