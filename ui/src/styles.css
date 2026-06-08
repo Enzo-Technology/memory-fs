@@ -548,3 +548,81 @@ body,
 .signin__google:hover {
   background: var(--fill);
 }
+
+/* ---------- ⌘K command palette (the one elevated surface) ---------- */
+.palette__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(27, 26, 23, 0.28);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  z-index: 50;
+}
+.palette {
+  width: 100%;
+  max-width: 560px;
+  background: var(--surface);
+  border: 1px solid var(--hairline-2);
+  border-radius: var(--r-lg);
+  box-shadow: 0 24px 64px rgba(27, 26, 23, 0.22);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 60vh;
+}
+.palette__input {
+  height: 52px;
+  border: none;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface);
+  padding: 0 var(--s-5);
+  font: inherit;
+  font-size: 16px;
+  color: var(--ink);
+}
+.palette__input::placeholder {
+  color: var(--ink-4);
+}
+.palette__input:focus {
+  outline: none;
+}
+.palette__results {
+  overflow-y: auto;
+  padding: var(--s-2) 0;
+}
+.palette__empty {
+  padding: var(--s-4) var(--s-5);
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.prow {
+  width: 100%;
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 10px var(--s-5);
+  display: grid;
+  gap: var(--s-1);
+}
+.prow--active {
+  background: var(--accent-soft);
+}
+.prow__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+.prow__head .tdot {
+  margin-left: auto;
+}
+.prow__snippet {
+  font-size: 13px;
+  color: var(--ink-3);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
