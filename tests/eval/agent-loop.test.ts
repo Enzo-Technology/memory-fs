@@ -33,8 +33,9 @@ describe("agent loop", () => {
     expect(r.readBeforeAnswer).toBe(false);
   });
 
-  it("readBeforeAnswer=false when first response has both text and tool_use blocks", async () => {
+  it("readBeforeAnswer=true when first response has both text and tool_use blocks (provider-neutral)", async () => {
     // Realistic case: Claude emits a preamble then a tool call in the same response.
+    // readBeforeAnswer = any tool ran before the final answer, regardless of block order.
     const mixedFirst = {
       stop_reason: "tool_use",
       content: [
@@ -46,7 +47,7 @@ describe("agent loop", () => {
     const r = await runAgentLoop({ anthropic, mcp: fakeMcp, model: "m", system: "s",
       tools: [{ name: "context_search", description: "d", input_schema: { type: "object" } }],
       messages: [{ role: "user", content: "hi" }], maxSteps: 10 });
-    expect(r.readBeforeAnswer).toBe(false);  // text came first, so tool did NOT precede answer
+    expect(r.readBeforeAnswer).toBe(true);  // tool ran before the final answer; preamble text in same message is irrelevant
     expect(r.toolCalls.map((c) => c.name)).toEqual(["context_search"]);
     expect(r.finalText).toBe("found it");
   });
@@ -60,6 +61,25 @@ describe("agent loop", () => {
     expect(r.toolCalls.map((c) => c.name)).toEqual(["context_search"]);
     expect(r.finalText).toBe("recovered");
     expect(r.stopReason).toBe("end_turn");
+  });
+
+  it("counts a tool call as read-before-answer even when the model narrates in the same message (regression)", async () => {
+    // Anthropic emits a text preamble in the SAME assistant message as its first tool_use.
+    const preambleThenTool = {
+      stop_reason: "tool_use",
+      content: [
+        { type: "text", text: "Let me check the store first." },
+        { type: "tool_use", id: "tu_1", name: "context_search", input: { query: "x" } },
+      ],
+    };
+    const anthropic = fakeAnthropic([preambleThenTool, textMsg("done")]);
+    const r = await runAgentLoop({
+      anthropic, mcp: fakeMcp, model: "m", system: "s",
+      tools: [{ name: "context_search", description: "d", input_schema: { type: "object" } }],
+      messages: [{ role: "user", content: "hi" }], maxSteps: 10,
+    });
+    expect(r.toolCalls.map((c) => c.name)).toEqual(["context_search"]);
+    expect(r.readBeforeAnswer).toBe(true); // BUG WAS false: preamble text flipped the flag
   });
 
   it("stopReason=max_steps and exactly maxSteps tool calls when model always returns tool_use", async () => {

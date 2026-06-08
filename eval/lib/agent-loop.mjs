@@ -1,10 +1,10 @@
 // eval/lib/agent-loop.mjs — minimal multi-step tool loop over the Anthropic SDK.
-// Records ordered tool calls and whether any tool ran before the first assistant text.
+// Records ordered tool calls and whether any tool ran before the terminating answer.
+// NOTE: "readBeforeAnswer" here means "a tool ran before the final answer" — provider-neutral.
+// It does NOT distinguish reads from writes; eval/wording-score.mjs does that from toolCalls.
 export async function runAgentLoop({ anthropic, mcp, model, system, tools, messages, maxSteps = 10, temperature = 1.0, maxTokens = 1024, extraCreateArgs = {} }) {
   const convo = messages.slice();
   const toolCalls = [];
-  let readBeforeAnswer = false;
-  let sawText = false;
   let finalText = "";
   let usageIn = 0, usageOut = 0; // accumulate across steps for budget tracking
 
@@ -18,14 +18,11 @@ export async function runAgentLoop({ anthropic, mcp, model, system, tools, messa
     const textBlocks = res.content.filter((b) => b.type === "text");
     const toolBlocks = res.content.filter((b) => b.type === "tool_use");
 
-    if (textBlocks.length) { sawText = true; finalText = textBlocks.map((b) => b.text).join("\n"); }
-    for (const b of toolBlocks) {
-      if (!sawText && toolCalls.length === 0) readBeforeAnswer = true; // first action was a tool call
-      toolCalls.push({ name: b.name, input: b.input });
-    }
+    if (textBlocks.length) finalText = textBlocks.map((b) => b.text).join("\n");
+    for (const b of toolBlocks) toolCalls.push({ name: b.name, input: b.input });
 
     if (res.stop_reason !== "tool_use" || toolBlocks.length === 0) {
-      return { toolCalls, readBeforeAnswer, finalText, steps: step + 1, stopReason: res.stop_reason, usage: { input: usageIn, output: usageOut } };
+      return { toolCalls, readBeforeAnswer: toolCalls.length > 0, finalText, steps: step + 1, stopReason: res.stop_reason, usage: { input: usageIn, output: usageOut } };
     }
 
     convo.push({ role: "assistant", content: res.content });
@@ -38,5 +35,5 @@ export async function runAgentLoop({ anthropic, mcp, model, system, tools, messa
     }
     convo.push({ role: "user", content: results });
   }
-  return { toolCalls, readBeforeAnswer, finalText, steps: maxSteps, stopReason: "max_steps", usage: { input: usageIn, output: usageOut } };
+  return { toolCalls, readBeforeAnswer: toolCalls.length > 0, finalText, steps: maxSteps, stopReason: "max_steps", usage: { input: usageIn, output: usageOut } };
 }
