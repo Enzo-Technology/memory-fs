@@ -15,6 +15,7 @@ export type BrowseKind =
   | "hubs"
   | "orphans"
   | "tags"
+  | "tagged"
   | "namespaces";
 
 export interface NoteInput {
@@ -54,6 +55,7 @@ export interface BrowseInput {
   namespace?: string;
   prefix?: string;
   limit?: number;
+  tag?: string;
 }
 
 export interface RecentItem {
@@ -86,6 +88,7 @@ export type BrowseResult =
   | { kind: "hubs"; total: number; items: HubItem[] }
   | { kind: "orphans"; total: number; items: OrphanItem[] }
   | { kind: "tags"; total: number; items: TagItem[] }
+  | { kind: "tagged"; total: number; items: RecentItem[] }
   | { kind: "namespaces"; total: number; items: NamespaceItem[] };
 
 export interface Backlink {
@@ -400,6 +403,12 @@ export class MemoryStore {
         };
       case "tags":
         return { kind: "tags", total, items: this.tagVocabulary(input.prefix, limit) };
+      case "tagged":
+        return {
+          kind: "tagged",
+          total,
+          items: input.tag ? this.tagged(input.tag, limit) : [],
+        };
       case "namespaces":
         return {
           kind: "namespaces",
@@ -497,6 +506,21 @@ export class MemoryStore {
          LIMIT @limit`,
       )
       .all(params);
+  }
+
+  // List the memories carrying a given tag, newest first. The tag *vocabulary* lives in
+  // tagVocabulary (kind=tags); this is the drill-in: pick a tag, see its memories. Records, so
+  // it carries a snippet (ADR 0002), matching recent/hubs/orphans.
+  private tagged(tag: string, limit: number): RecentItem[] {
+    const rows = this.db
+      .prepare<unknown[], Omit<RecentItem, "snippet"> & { content: string }>(
+        `SELECT m.namespace, m.key, m.type, m.updated_at, m.content FROM memories m
+         WHERE EXISTS (SELECT 1 FROM tags t WHERE t.memory_id = m.id AND t.tag = @tag)
+         ORDER BY m.updated_at DESC, m.id DESC
+         LIMIT @limit`,
+      )
+      .all({ tag, limit });
+    return rows.map(({ content, ...item }) => ({ ...item, snippet: snippet(content) }));
   }
 
   // The one sanctioned identifier-only view alongside tags: an explicit

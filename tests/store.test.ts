@@ -122,6 +122,43 @@ describe("MemoryStore.browse", () => {
   });
 });
 
+describe("MemoryStore.browse tagged", () => {
+  it("lists only memories carrying the tag, newest first, respecting limit", () => {
+    const s = freshStore();
+    s.note({ namespace: "ns", key: "a", content: "alpha", tags: ["decision"] });
+    s.note({ namespace: "ns", key: "b", content: "beta", tags: ["decision", "auth"] });
+    s.note({ namespace: "ns", key: "c", content: "gamma", tags: ["auth"] });
+    const r = s.browse({ kind: "tagged", tag: "decision" });
+    if (r.kind !== "tagged") throw new Error("expected tagged result");
+    const keys = r.items.map((i) => i.key);
+    expect(keys).toContain("a");
+    expect(keys).toContain("b");
+    expect(keys).not.toContain("c");
+    // newest first: b was written after a.
+    expect(keys.indexOf("b")).toBeLessThan(keys.indexOf("a"));
+    // limit is respected.
+    const limited = s.browse({ kind: "tagged", tag: "decision", limit: 1 });
+    if (limited.kind !== "tagged") throw new Error("expected tagged result");
+    expect(limited.items.length).toBe(1);
+  });
+
+  it("returns an empty list for an unknown tag", () => {
+    const s = freshStore();
+    s.note({ namespace: "ns", key: "a", content: "x", tags: ["real"] });
+    const r = s.browse({ kind: "tagged", tag: "nope" });
+    if (r.kind !== "tagged") throw new Error("expected tagged result");
+    expect(r.items).toEqual([]);
+  });
+
+  it("returns an empty list when no tag is given", () => {
+    const s = freshStore();
+    s.note({ namespace: "ns", key: "a", content: "x", tags: ["real"] });
+    const r = s.browse({ kind: "tagged" });
+    if (r.kind !== "tagged") throw new Error("expected tagged result");
+    expect(r.items).toEqual([]);
+  });
+});
+
 describe("MemoryStore.del", () => {
   it("refuses delete when backlinks exist unless force=true", () => {
     const s = freshStore();
