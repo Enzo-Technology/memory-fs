@@ -27,7 +27,8 @@
     "eval:full": "node eval/wording-run.mjs --full",
     "eval:score": "node eval/wording-score.mjs",
     "eval:judge": "node eval/wording-judge.mjs",
-    "eval:analyze": "node eval/analysis.mjs"
+    "eval:analyze": "node eval/analysis.mjs",
+    "eval:charts": "node eval/charts.mjs"
   },
   "dependencies": {
     "@better-auth/oauth-provider": "^1.6.13",
