@@ -35,7 +35,13 @@ export function SignIn() {
   // Not signed in. callbackURL resumes the OAuth flow if we're mid-authorize, else returns to the
   // address that 401'd (api.ts sets ?next=), else the app home. Dedicated centered card (not the
   // generic Shell) so the entry screen gets the Foundations treatment.
-  const next = new URLSearchParams(location.search).get("next");
+  const rawNext = new URLSearchParams(location.search).get("next");
+  // Only trust same-origin relative paths as the post-auth target — reject absolute URLs and
+  // protocol-relative/backslash forms so ?next= can't become an open redirect.
+  const next =
+    rawNext && rawNext.startsWith("/") && rawNext[1] !== "/" && rawNext[1] !== "\\"
+      ? rawNext
+      : null;
   const callbackURL = resume ?? next ?? "/";
   return (
     <main className="signin">
