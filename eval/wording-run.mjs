@@ -46,11 +46,18 @@ function createConfigFor(provider) {
 // --full: the §3 concentrated grid.
 const PILOT_OPENAI = process.argv.includes("--pilot-openai");
 const PILOT = process.argv.includes("--pilot");
-const MATRIX = PILOT_OPENAI
+let MATRIX = PILOT_OPENAI
   ? { conditions: ["M", "C"], models: ["openai"], scripts: ["P1", "P2", "P3b"], n: 5 }
   : PILOT
   ? { conditions: ["M", "C"], models: ["sonnet"], scripts: ["P1", "P2", "P3b"], n: 5 }
   : { conditions: ["M", "C", "K", "N", "MxC", "CxM", "PROD"], models: ["haiku", "sonnet", "opus"], scripts: ["P1", "P2", "P3b"], n: 20 };
+
+const argVal = (k) => { const a = process.argv.find(x => x.startsWith(k + "=")); return a ? a.split("=")[1] : null; };
+const condOverride = argVal("--conditions");
+const scriptOverride = argVal("--scripts");
+if (condOverride) MATRIX.conditions = condOverride.split(",");
+if (scriptOverride) MATRIX.scripts = scriptOverride.split(",");
+const TERSE = process.argv.includes("--terse");
 
 function shuffleLogged(tools) {
   const order = tools.map((_, i) => i);
@@ -58,13 +65,13 @@ function shuffleLogged(tools) {
   return { tools: order.map((i) => tools[i]), order };
 }
 
-async function connectServer(condition, dbPath) {
+async function connectServer(condition, dbPath, terse = false) {
   const isProd = condition === "PROD";
   const client = new Client({ name: "wording-run", version: "0" });
   await client.connect(new StdioClientTransport({
     command: "node",
     args: [isProd ? REAL_SERVER : WRAPPER],
-    env: { ...process.env, MEMORY_FS_DB: dbPath, ...(isProd ? {} : { NAMING: condition }) },
+    env: { ...process.env, MEMORY_FS_DB: dbPath, ...(isProd ? {} : { NAMING: condition }), ...(terse ? { TERSE: "1" } : {}) },
   }));
   const { tools } = await client.listTools();
   return { client, tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.inputSchema })) };
@@ -81,7 +88,7 @@ function resolveHistory(script, iter) {
   return { baseHistory: script.history ?? [], historySource: "history" };
 }
 
-async function runScript({ anthropic, modelId, condition, model, scriptId, iter, createConfig }) {
+async function runScript({ anthropic, modelId, condition, model, modelLabel, scriptId, iter, createConfig, terse }) {
   const script = SCRIPTS[scriptId];
   const { baseHistory, historySource } = resolveHistory(script, iter);
   const transcripts = [];
@@ -92,7 +99,7 @@ async function runScript({ anthropic, modelId, condition, model, scriptId, iter,
     if (turn.fresh || !shared) {
       const dbPath = `/tmp/memfs-wording-${randomUUID()}.db`;
       buildSeedDb(dbPath);
-      const { client, tools } = await connectServer(condition, dbPath);
+      const { client, tools } = await connectServer(condition, dbPath, terse);
       const { tools: shuffled, order } = shuffleLogged(tools);
       shared = { client, tools: shuffled, order, dbPath, messages: baseHistory.slice() };
     }
@@ -115,13 +122,14 @@ async function main() {
         for (let iter = 0; iter < MATRIX.n; iter++) {
           const { client: anthropic, id: modelId, provider } = resolveClient(model);
           const createConfig = createConfigFor(provider);
+          const modelLabel = TERSE ? `${model}-terse` : model;
           let transcripts;
-          try { transcripts = await runScript({ anthropic, modelId, condition, model, scriptId, iter, createConfig }); }
-          catch (e) { console.error(`\n[excluded] ${condition}/${model}/${scriptId}#${iter}: ${e.message}`); continue; }
-          const dir = resolve(ARTIFACTS, condition, model, scriptId);
+          try { transcripts = await runScript({ anthropic, modelId, condition, model, modelLabel, scriptId, iter, createConfig, terse: TERSE }); }
+          catch (e) { console.error(`\n[excluded] ${condition}/${modelLabel}/${scriptId}#${iter}: ${e.message}`); continue; }
+          const dir = resolve(ARTIFACTS, condition, modelLabel, scriptId);
           mkdirSync(dir, { recursive: true });
           writeFileSync(resolve(dir, `${iter}.json`),
-            JSON.stringify({ condition, model, scriptId, iter, transcripts }, null, 2));
+            JSON.stringify({ condition, model: modelLabel, scriptId, iter, transcripts }, null, 2));
           process.stdout.write(".");
         }
   process.stdout.write("\ndone\n");

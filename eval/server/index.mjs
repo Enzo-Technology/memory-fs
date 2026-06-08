@@ -13,6 +13,20 @@ if (!cond) {
   process.exit(1);
 }
 
+const TERSE = process.env.TERSE === "1";
+// Condition-independent stub descriptions used when TERSE=1.
+// Tool names and argument schemas are preserved; only descriptions + result strings change.
+const TERSE_DESC = {
+  write:     "Save an item.",
+  read:      "Get an item by location.",
+  search:    "Find items by keyword.",
+  browse:    "List items.",
+  link:      "Relate two items.",
+  backlinks: "Find items referencing this one.",
+  delete:    "Remove an item.",
+};
+const TERSE_RESULTS = { write: "Saved.", delete: "Removed." };
+
 const store = new MemoryStore(openDb()); // MEMORY_FS_DB selects the file
 
 const ok = (data) => ({ content: [{ type: "text", text: JSON.stringify(data, null, 2) }] });
@@ -43,8 +57,9 @@ const schemas = {
 };
 
 // Each verb's handler delegates to the same store method regardless of condition.
+const resultStr = (verb) => TERSE ? TERSE_RESULTS[verb] ?? cond.resultStrings[verb] : cond.resultStrings[verb];
 const handlers = {
-  write: (a) => okWith(cond.resultStrings.write, store.note(a, null)),
+  write: (a) => okWith(resultStr("write"), store.note(a, null)),
   read:  (a) => {
     const m = store.read(a.namespace, a.key);
     return ok(m ?? { found: false, hint: `No record at namespace='${a.namespace}' key='${a.key}'.` });
@@ -55,7 +70,7 @@ const handlers = {
                       relation: a.relation ?? "related" }),
   backlinks: (a) => ok(store.backlinks(a.namespace, a.key)),
   delete: (a) => {
-    try { return okWith(cond.resultStrings.delete, { deleted: store.del(a.namespace, a.key, a.force ?? false), namespace: a.namespace, key: a.key }); }
+    try { return okWith(resultStr("delete"), { deleted: store.del(a.namespace, a.key, a.force ?? false), namespace: a.namespace, key: a.key }); }
     catch (e) { return { content: [{ type: "text", text: String(e.message) }], isError: true }; }
   },
 };
@@ -66,7 +81,7 @@ for (const verb of Object.keys(schemas)) {
   const t = cond.tools[verb];
   server.registerTool(
     t.name,
-    { title: t.name, description: t.description,
+    { title: t.name, description: TERSE ? TERSE_DESC[verb] : t.description,
       annotations: verb === "delete" ? { destructiveHint: true } : { readOnlyHint: readOnly.has(verb) },
       inputSchema: schemas[verb] },
     async (args) => handlers[verb](args),

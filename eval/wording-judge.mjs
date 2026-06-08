@@ -43,17 +43,18 @@ export async function judgeRecord(anthropic, blinded, manifest = null) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const { readdirSync, readFileSync, writeFileSync, existsSync } = await import("node:fs");
+  const { readdirSync, readFileSync, writeFileSync, existsSync, statSync } = await import("node:fs");
   const { resolve } = await import("node:path");
   const Anthropic = (await import("@anthropic-ai/sdk")).default;
   const anthropic = new Anthropic();
   const root = resolve(import.meta.dirname, "artifacts");
   const manifest = JSON.parse(readFileSync(resolve(import.meta.dirname, "fixtures/p3-manifest.json"), "utf-8"));
   const out = [];
-  const walk = (d) => existsSync(d) ? readdirSync(d) : [];
-  for (const cond of walk(root)) for (const model of walk(resolve(root, cond)))
-    for (const script of walk(resolve(root, cond, model)))
-      for (const f of walk(resolve(root, cond, model, script))) {
+  const dirs = (d) => existsSync(d) ? readdirSync(d).filter((e) => statSync(resolve(d, e)).isDirectory()) : [];
+  const leaves = (d) => existsSync(d) ? readdirSync(d).filter((f) => /^\d+\.json$/.test(f)) : [];
+  for (const cond of dirs(root)) for (const model of dirs(resolve(root, cond)))
+    for (const script of dirs(resolve(root, cond, model)))
+      for (const f of leaves(resolve(root, cond, model, script))) {
         const run = JSON.parse(readFileSync(resolve(root, cond, model, script, f), "utf-8"));
         for (const r of extractWrittenRecords(run)) {
           const verdict = await judgeRecord(anthropic, blindRecord(r), script === "P3b" ? manifest : null);

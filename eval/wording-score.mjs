@@ -85,15 +85,16 @@ export function scoreTurn(t) {
 
 // Aggregator — reads the archive and writes eval/artifacts/scores.json.
 // Guarded behind import.meta.url check so importing scoreTurn doesn't trigger I/O.
-import { readdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
 function* iterArtifacts(root) {
   if (!existsSync(root)) return;
-  for (const cond of readdirSync(root))
-    for (const model of readdirSync(resolve(root, cond)))
-      for (const script of readdirSync(resolve(root, cond, model)))
-        for (const f of readdirSync(resolve(root, cond, model, script)))
+  const dirs = (d) => readdirSync(d).filter((e) => statSync(resolve(d, e)).isDirectory());
+  for (const cond of dirs(root))
+    for (const model of dirs(resolve(root, cond)))
+      for (const script of dirs(resolve(root, cond, model)))
+        for (const f of readdirSync(resolve(root, cond, model, script)).filter((f) => /^\d+\.json$/.test(f)))
           yield JSON.parse(
             readFileSync(resolve(root, cond, model, script, f), "utf-8"),
           );
