@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { MemoryStore } from "../core/store";
 
-const memoryType = z.enum(["user", "feedback", "project", "reference", "note"]);
+const recordType = z.enum(["user", "feedback", "project", "reference", "note"]);
 const onConflict = z.enum(["overwrite", "append", "error"]);
 const browseKind = z.enum(["index", "recent", "tags", "namespaces"]);
 
@@ -13,7 +13,7 @@ const NS_DESC =
 const NS_FILTER_DESC = "restrict results to this namespace";
 const KEY_DESC = "stable slug identifying the record within its namespace (normalized to a slug)";
 const TYPE_DESC =
-    "kind of memory: 'user' (who the user is), 'feedback' (how to work), " +
+    "kind of record: 'user' (who the user is), 'feedback' (how to work), " +
     "'project' (ongoing work/goals), 'reference' (durable reference docs — use " +
     "for longer material), 'note' (default; a single atomic fact)";
 
@@ -33,27 +33,28 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
     const server = new McpServer({ name: "memory-fs", version: "0.1.0" });
 
     server.registerTool(
-        "memory_note",
+        "context_write",
         {
-            title: "Write a memory",
+            title: "Write to the shared context",
             annotations: { readOnlyHint: false },
             description:
-                "Write a durable fact, decision, or preference to the SHARED memory store — visible " +
-                "to all agents, machines, and teammates, unlike your local session memory. " +
-                "Auto-extracts [[wikilinks]] and warns on near-duplicates; key auto-derives from " +
-                "content if omitted. Namespace is a logical scope like 'user', 'project:web', or " +
-                "'agent:reviewer'. Use when the user states something lasting, makes a decision, or " +
-                "asks to remember; not for transient task state. Keep each memory atomic; for a " +
+                "Write a record to the SHARED team context: a key decision, convention, or piece of " +
+                "direction the team relies on — visible to all agents, machines, and teammates, unlike " +
+                "your local session memory. When direction changes, update the existing record rather " +
+                "than appending a near-duplicate. Auto-extracts [[wikilinks]] and warns on near-duplicates; " +
+                "key auto-derives from content if omitted. Namespace is a logical scope like 'user', " +
+                "'project:web', or 'agent:reviewer'. Use when the team makes a decision, sets a convention, " +
+                "or establishes direction; not for transient task state. Keep each record atomic; for a " +
                 "topic with several facts, write a short hub note that links [[the atoms]] so they're " +
                 "discoverable together. Never store secrets or PII.",
             inputSchema: {
-                content: z.string().min(1).describe("markdown body of the memory; can include [[wikilinks]]"),
+                content: z.string().min(1).describe("markdown body of the record; can include [[wikilinks]]"),
                 namespace: z.string().min(1).describe(NS_DESC),
                 key: z.string().optional().describe("stable slug; normalized to a slug, or auto-derived from content if omitted"),
-                type: memoryType.optional().describe(TYPE_DESC),
+                type: recordType.optional().describe(TYPE_DESC),
                 tags: z.array(z.string()).optional().describe("freeform labels for filtering"),
                 metadata: z.record(z.string(), z.unknown()).optional().describe("arbitrary structured data attached to the record"),
-                source: z.string().optional().describe("where this memory came from, e.g. a URL or document reference"),
+                source: z.string().optional().describe("where this record came from, e.g. a URL or document reference"),
                 on_conflict: onConflict.optional().describe("behavior if (namespace, key) already exists; default 'overwrite'"),
             },
         },
@@ -61,19 +62,19 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
     );
 
     server.registerTool(
-        "memory_recall",
+        "context_search",
         {
-            title: "Search memories",
+            title: "Search the shared context",
             annotations: { readOnlyHint: true },
             description:
-                "Search the SHARED memory store by full-text query; returns full ranked records " +
-                "(records with inbound links rank first), not just snippets. Use when the user " +
-                "references prior context, decisions, or deadlines you weren't told this session. " +
-                "FTS5 syntax: phrases (\"exact phrase\"), boolean (X AND Y), prefix (term*).",
+                "Search the SHARED team context by full-text query; returns full ranked records " +
+                "(records with inbound links rank first), not just snippets. Read it before acting when " +
+                "the user references prior context, decisions, conventions, or direction you weren't told " +
+                "this session. FTS5 syntax: phrases (\"exact phrase\"), boolean (X AND Y), prefix (term*).",
             inputSchema: {
                 query: z.string().min(1).describe("FTS5 search expression"),
                 namespace: z.string().optional().describe(NS_FILTER_DESC),
-                type: memoryType.optional().describe("restrict results to this type"),
+                type: recordType.optional().describe("restrict results to this type"),
                 tags: z.array(z.string()).optional().describe("restrict results to records with all these tags"),
                 since: z.string().optional().describe("ISO date; only records updated since"),
                 limit: z.number().int().positive().max(20).optional().describe("default 5"),
@@ -83,16 +84,16 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
     );
 
     server.registerTool(
-        "memory_browse",
+        "context_browse",
         {
-            title: "Browse the memory store",
+            title: "Browse the shared context",
             annotations: { readOnlyHint: true },
             description:
-                "Orient in the SHARED store without a query. kind='index' for an overview; 'recent' " +
-                "for last-updated records (each with a snippet); 'tags' for the tag vocabulary with " +
-                "counts; 'namespaces' for the namespace vocabulary with counts (prefix 'voice:' lists " +
-                "every voice:* scope). Use to summarize what exists or discover scopes, then memory_read " +
-                "a specific record or memory_recall to search.",
+                "Survey the SHARED team context without a query, so you know what the team already relies " +
+                "on. kind='index' for an overview; 'recent' for last-updated records (each with a snippet); " +
+                "'tags' for the tag vocabulary with counts; 'namespaces' for the namespace vocabulary with " +
+                "counts (prefix 'voice:' lists every voice:* scope). Use to orient before acting, then " +
+                "context_read a specific record or context_search to search.",
             inputSchema: {
                 kind: browseKind.describe("what view to return"),
                 namespace: z.string().optional().describe(NS_FILTER_DESC),
@@ -104,15 +105,15 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
     );
 
     server.registerTool(
-        "memory_read",
+        "context_read",
         {
-            title: "Read a memory by exact key",
+            title: "Read a context record by exact key",
             annotations: { readOnlyHint: true },
             description:
-                "Fetch one record by exact (namespace, key) from the SHARED store, plus its immediate " +
-                "neighbourhood: outbound links ('children') and inbound links ('backlinks'), each with " +
-                "a snippet. Reading a hub-note surfaces everything it links in one call. Returns a hint " +
-                "if no record exists at that location.",
+                "Fetch one record by exact (namespace, key) from the SHARED context — read it before you " +
+                "act on it — plus its immediate neighbourhood: outbound links ('children') and inbound " +
+                "links ('backlinks'), each with a snippet. Reading a hub-note surfaces everything it links " +
+                "in one call. Returns a hint if no record exists at that location.",
             inputSchema: {
                 namespace: z.string().min(1).describe(NS_DESC),
                 key: z.string().min(1).describe(KEY_DESC),
@@ -123,7 +124,7 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
             if (!m) {
                 return ok({
                     found: false,
-                    hint: `No record at namespace='${namespace}' key='${key}'. Try memory_recall or memory_browse.`,
+                    hint: `No record at namespace='${namespace}' key='${key}'. Try context_search or context_browse.`,
                 });
             }
             return ok(m);
@@ -131,14 +132,14 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
     );
 
     server.registerTool(
-        "memory_delete",
+        "context_delete",
         {
-            title: "Delete a memory",
+            title: "Delete a context record",
             annotations: { destructiveHint: true },
             description:
-                "Permanently delete a record from the SHARED store. Refuses if any other record links " +
-                "to it (force=true overrides, but consider updating the target instead). Use when the " +
-                "user asks to forget something or a record is clearly wrong.",
+                "Permanently delete a record from the SHARED context. Refuses if any other record links " +
+                "to it (force=true overrides, but consider updating the target instead). Use when a record " +
+                "no longer reflects the team's direction or is clearly wrong.",
             inputSchema: {
                 namespace: z.string().min(1).describe(NS_DESC),
                 key: z.string().min(1).describe(KEY_DESC),
@@ -156,9 +157,9 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
     );
 
     server.registerTool(
-        "memory_link",
+        "context_link",
         {
-            title: "Link two memories manually",
+            title: "Link two context records manually",
             annotations: { idempotentHint: true },
             description:
                 "Assert a directional relationship between two records that you can't express as a " +
@@ -179,14 +180,14 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
     );
 
     server.registerTool(
-        "memory_backlinks",
+        "context_backlinks",
         {
-            title: "List records that link to a memory",
+            title: "List records that link to a context record",
             annotations: { readOnlyHint: true },
             description:
-                "List records in the SHARED store that reference the given (namespace, key) via a link " +
+                "List records in the SHARED context that reference the given (namespace, key) via a link " +
                 "or [[wikilink]] — what discussed it, depends on it, or supersedes it. Often more " +
-                "useful than memory_recall for understanding a topic.",
+                "useful than context_search for understanding a topic.",
             inputSchema: {
                 namespace: z.string().min(1).describe(NS_DESC),
                 key: z.string().min(1).describe(KEY_DESC),

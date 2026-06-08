@@ -24,13 +24,13 @@ DB lives at `~/.memory-fs/memory.db` by default; override with `MEMORY_FS_DB=/pa
 
 | Tool | What it does |
 |---|---|
-| `memory_note` | Write a memory; auto-extracts `[[wikilinks]]`; warns on near-duplicates |
-| `memory_recall` | Search memories (FTS5); hub records promoted |
-| `memory_browse` | Discovery: `kind=index/recent/hubs/orphans/tags` |
-| `memory_read` | Fetch one by `(namespace, key)` |
-| `memory_delete` | Permanent delete; refuses if backlinks exist (`force=true` overrides) |
-| `memory_link` | Manual link (most links come from auto-extracted `[[wikilinks]]`) |
-| `memory_backlinks` | List records that point to a given memory |
+| `context_write` | Write a record to the shared context; auto-extracts `[[wikilinks]]`; warns on near-duplicates |
+| `context_search` | Search the shared context (FTS5); hub records promoted |
+| `context_browse` | Discovery: `kind=index/recent/hubs/orphans/tags` |
+| `context_read` | Fetch one by `(namespace, key)` |
+| `context_delete` | Permanent delete; refuses if backlinks exist (`force=true` overrides) |
+| `context_link` | Manual link (most links come from auto-extracted `[[wikilinks]]`) |
+| `context_backlinks` | List records that point to a given record |
 
 ## Hosting (shared store)
 
@@ -38,7 +38,7 @@ Set `MEMORY_FS_HTTP_PORT` to serve over Streamable HTTP instead of stdio; `MEMOR
 
 ## Local web UI
 
-A local-only page to browse, read, and delete memories in a hosted store. It runs a small proxy on your machine that holds the bearer token server-side and talks to the remote over MCP — **the token never reaches the browser**, and the browser only ever talks to `localhost`.
+A local-only page to browse, read, and delete records in a hosted store. It runs a small proxy on your machine that holds the bearer token server-side and talks to the remote over MCP — **the token never reaches the browser**, and the browser only ever talks to `localhost`.
 
 ```sh
 npm run build
@@ -49,7 +49,7 @@ npm run ui
 # then open http://127.0.0.1:4040
 ```
 
-`MEMORY_FS_UI_PORT` defaults to 4040. Scope is browse/read/delete only — memories are still authored by agents via `memory_note`.
+`MEMORY_FS_UI_PORT` defaults to 4040. Scope is browse/read/delete only — memories are still authored by agents via `context_write`.
 
 To keep the token out of your shell, store `MEMORY_FS_URL` and `MEMORY_FS_TOKEN` in [Infisical](https://infisical.com) and run `npm run ui:secure` (`infisical run -- node dist/ui-server.js`) — it injects the secrets as env vars. Requires `infisical login` + `infisical init` once to link the project; pass `--env=<name>` to `infisical run` to pick a non-default environment.
 
