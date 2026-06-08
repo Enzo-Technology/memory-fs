@@ -16,6 +16,7 @@ import type { MemoryType } from "../../src/core/db";
 import { buildTree, type TreeNode } from "./namespaceTree";
 import { addressToPath, parseAddress } from "./route";
 import { sortByAddress } from "./sortRows";
+import { flattenVisible, type NavItem } from "./visibleRows";
 
 export interface Row {
   namespace: string;
@@ -49,6 +50,12 @@ export interface BrowserView {
   paletteOpen: boolean;
   openPalette: () => void;
   closePalette: () => void;
+  cursor: number;
+  cursorAddress: { namespace: string; key: string } | null; // the cursored row, if it is a leaf/memory
+  moveCursor: (delta: number) => void;
+  cursorExpand: () => void;
+  cursorCollapse: () => void;
+  cursorActivate: () => void;
 }
 
 // First non-empty line of content — the de-facto title/snippet (the store never stores a title).
@@ -78,6 +85,17 @@ function toRows(b: BrowseResult): Row[] {
   return [];
 }
 
+// Locate a TreeNode by its full namespace (depth-first). Used by the keyboard cursor to turn a
+// flattened NavItem back into the node toggleFolder expects.
+function findNode(nodes: TreeNode[], namespace: string): TreeNode | null {
+  for (const n of nodes) {
+    if (n.namespace === namespace) return n;
+    const hit = findNode(n.children, namespace);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 export function useBrowser(): BrowserView {
   const [lens, setLens] = useState<Lens>("namespaces");
   const [query, setQuery] = useState("");
@@ -94,6 +112,7 @@ export function useBrowser(): BrowserView {
   const [detail, setDetail] = useState<ReadResult | null>(null);
   const [mode, setMode] = useState<Mode>("split");
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [cursor, setCursor] = useState(0);
   const [totals, setTotals] = useState({ memories: 0, namespaces: 0 });
   const inflight = useRef<Set<string>>(new Set());
   const loaded = useRef<Set<string>>(new Set());
@@ -102,6 +121,28 @@ export function useBrowser(): BrowserView {
     () => (namespaceItems ? buildTree(namespaceItems) : null),
     [namespaceItems],
   );
+
+  // The flat, ordered list the keyboard cursor indexes: tree-lens -> flattenVisible; otherwise the
+  // active rows (search results take precedence over the flat lens, matching TreePane.renderBody).
+  const navItems = useMemo<NavItem[]>(() => {
+    const rowsToNav = (rows: Row[]): NavItem[] =>
+      rows.map((r) => ({ kind: "leaf", namespace: r.namespace, key: r.key }));
+    if (query.trim()) return rowsToNav(results ?? []);
+    if (lens === "namespaces") return tree ? flattenVisible(tree, expanded, leaves) : [];
+    return rowsToNav(flat ?? []);
+  }, [query, lens, tree, expanded, leaves, results, flat]);
+
+  // Reset the cursor when the active list's identity changes (new lens / new search).
+  useEffect(() => {
+    setCursor(0);
+  }, [lens, query]);
+
+  const cursorAddress = useMemo(() => {
+    const item = navItems[cursor];
+    return item && item.kind === "leaf"
+      ? { namespace: item.namespace, key: item.key }
+      : null;
+  }, [navItems, cursor]);
 
   // 1. Namespace vocabulary — fetched once; powers the tree + the running total.
   useEffect(() => {
@@ -233,6 +274,49 @@ export function useBrowser(): BrowserView {
     setExpanded(all);
   }, [tree, ensureLeaf]);
 
+  const moveCursor = useCallback(
+    (delta: number) => {
+      setCursor((c) => {
+        const max = navItems.length - 1;
+        if (max < 0) return 0;
+        return Math.min(Math.max(c + delta, 0), max);
+      });
+    },
+    [navItems.length],
+  );
+
+  const cursorExpand = useCallback(() => {
+    const item = navItems[cursor];
+    if (!item || item.kind !== "folder" || !tree) return;
+    if (expanded.has(item.namespace)) return; // already open — let the next ↓ move into it
+    const node = findNode(tree, item.namespace);
+    if (node) toggleFolder(node);
+  }, [navItems, cursor, tree, expanded]);
+
+  const cursorCollapse = useCallback(() => {
+    const item = navItems[cursor];
+    if (!item || item.kind !== "folder" || !tree) return;
+    if (!expanded.has(item.namespace)) return; // already closed
+    const node = findNode(tree, item.namespace);
+    if (node) toggleFolder(node);
+  }, [navItems, cursor, tree, expanded]);
+
+  const cursorActivate = useCallback(() => {
+    const item = navItems[cursor];
+    if (!item) return;
+    if (item.kind === "folder") {
+      if (!tree) return;
+      const node = findNode(tree, item.namespace);
+      if (node) toggleFolder(node);
+      return;
+    }
+    // A leaf: open it; if it is already the selected memory, drill (mirrors Reader's focus toggle).
+    const alreadySelected =
+      !!selected && selected.namespace === item.namespace && selected.key === item.key;
+    if (alreadySelected) setMode("drill");
+    else open(item.namespace, item.key);
+  }, [navItems, cursor, tree, expanded, selected]);
+
   const open = useCallback((namespace: string, key: string) => {
     setSelected({ namespace, key });
     history.pushState(null, "", addressToPath(namespace, key));
@@ -265,5 +349,11 @@ export function useBrowser(): BrowserView {
     paletteOpen,
     openPalette: useCallback(() => setPaletteOpen(true), []),
     closePalette: useCallback(() => setPaletteOpen(false), []),
+    cursor,
+    cursorAddress,
+    moveCursor,
+    cursorExpand,
+    cursorCollapse,
+    cursorActivate,
   };
 }
