@@ -3,13 +3,32 @@
 // fetch). Title is the first content line (never invented). In drill, neighbours gain snippets.
 // Props only. Styling: .reader.
 import { useState } from "react";
+import ReactMarkdown from "react-markdown";
+import type { Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { Backlink, ReadResult } from "../../src/core/store";
 import type { Mode } from "./useBrowser";
 import { TYPE_COLOR } from "./memoryType";
-import { tokenize, type Token } from "./wikilinkText";
+import { remarkWikilinks } from "./remarkWikilinks";
 
-function firstLine(content: string): string {
-  return (content.split("\n").find((l) => l.trim().length > 0) ?? "").trim();
+// The first non-empty line, stripped of a leading heading marker and surrounding emphasis/code
+// markers, so the title reads as plain text (e.g. `## **Brand voice**` → `Brand voice`).
+function cleanTitle(content: string): string {
+  const first = (content.split("\n").find((l) => l.trim().length > 0) ?? "").trim();
+  const noHeading = first.replace(/^#{1,6}\s+/, "");
+  return noHeading.replace(/^[*`]+/, "").replace(/[*`]+$/, "").trim();
+}
+
+// Drop a leading top-level heading line (and a following blank line) so the H1 that became the
+// title isn't repeated in the rendered body. Non-heading content is returned unchanged.
+function stripLeadingHeading(content: string): string {
+  const lines = content.split("\n");
+  let i = 0;
+  while (i < lines.length && lines[i]!.trim().length === 0) i++;
+  if (i >= lines.length || !/^#{1,6}\s+/.test(lines[i]!)) return content;
+  lines.splice(i, 1);
+  if (i < lines.length && lines[i]!.trim().length === 0) lines.splice(i, 1);
+  return lines.join("\n");
 }
 
 export function Reader({
@@ -52,7 +71,7 @@ export function Reader({
     );
   }
   const color = TYPE_COLOR[detail.type];
-  const title = firstLine(detail.content) || detail.key;
+  const title = cleanTitle(detail.content) || detail.key;
   const drilled = mode === "drill";
   const guarded = pendingBacklinks !== null;
   return (
@@ -170,10 +189,13 @@ export function Reader({
   );
 }
 
-// The memory body, rendered from wikilink tokens so [[links]] become navigable. A link resolves
-// iff its (namespace,key) is an existing outbound child — dangling targets are omitted from the
-// read payload's children server-side, so anything not in that set is muted and non-navigable
-// (never a dead-end click). Text tokens render verbatim; the <pre> preserves whitespace.
+// The memory body, rendered as markdown (react-markdown + gfm). The remarkWikilinks plugin turns
+// [[links]] into link nodes tagged with data-ns/data-key; the `a` override below makes them
+// navigable. A wikilink resolves iff its (namespace,key) is an existing outbound child — dangling
+// targets are omitted from the read payload's children server-side, so anything not in that set is
+// muted and non-navigable (never a dead-end click). The leading heading is dropped from the body
+// since it became the title. Raw HTML is left escaped by react-markdown (no rehype-raw) so
+// agent-authored content can't inject markup.
 function Body({
   detail,
   onNavigate,
@@ -181,37 +203,42 @@ function Body({
   detail: ReadResult;
   onNavigate: (namespace: string, key: string) => void;
 }) {
-  const tokens = tokenize(detail.content, detail.namespace);
   const resolvable = new Set(detail.children.map((c) => `${c.namespace}\x00${c.key}`));
+  const bodyMarkdown = stripLeadingHeading(detail.content);
+  const components: Components = {
+    a({ href, children, ...rest }) {
+      // Wikilinks arrive as <a class="wikilink-ref" data-ns data-key>: react-markdown spreads the
+      // plugin's hProperties straight onto props, so data-ns/data-key are readable as props["data-ns"]
+      // (verified at runtime — they are NOT camelCased). Non-wikilink links lack them.
+      const props = rest as Record<string, unknown>;
+      const ns = props["data-ns"] as string | undefined;
+      const key = props["data-key"] as string | undefined;
+      if (ns !== undefined && key !== undefined) {
+        if (resolvable.has(`${ns}\x00${key}`)) {
+          return (
+            <button className="wikilink" onClick={() => onNavigate(ns, key)}>
+              {children}
+            </button>
+          );
+        }
+        return <span className="wikilink wikilink--dangling">{children}</span>;
+      }
+      return (
+        <a href={href} target="_blank" rel="noreferrer">
+          {children}
+        </a>
+      );
+    },
+  };
   return (
-    <pre className="reader__content">
-      {tokens.map((t, i) => renderToken(t, i, resolvable, onNavigate))}
-    </pre>
-  );
-}
-
-function renderToken(
-  t: Token,
-  i: number,
-  resolvable: Set<string>,
-  onNavigate: (namespace: string, key: string) => void,
-) {
-  if (t.kind === "text") return t.text;
-  if (resolvable.has(`${t.namespace}\x00${t.key}`)) {
-    return (
-      <button
-        key={i}
-        className="wikilink"
-        onClick={() => onNavigate(t.namespace, t.key)}
+    <div className="reader__content reader__md">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkWikilinks(detail.namespace)]}
+        components={components}
       >
-        {t.raw}
-      </button>
-    );
-  }
-  return (
-    <span key={i} className="wikilink wikilink--dangling">
-      {t.raw}
-    </span>
+        {bodyMarkdown}
+      </ReactMarkdown>
+    </div>
   );
 }
 
