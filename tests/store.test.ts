@@ -81,6 +81,31 @@ describe("MemoryStore.recall", () => {
     const r = s.recall({ query: "auth", namespace: "x" });
     expect(r.map((m) => m.namespace)).toEqual(["x"]);
   });
+
+  // Regression: a hyphenated term + OR used to reach FTS5 raw and throw `no such column`.
+  it("handles hyphens and OR operators without throwing", () => {
+    const s = freshStore();
+    s.note({ namespace: "ns", key: "a", content: "a one-pager of sales collateral" });
+    s.note({ namespace: "ns", key: "b", content: "unrelated" });
+    const r = s.recall({ query: "one-pager OR sell sheet OR sales collateral" });
+    expect(r.map((m) => m.key)).toContain("a");
+  });
+
+  it("treats FTS5-hostile punctuation as literal terms instead of erroring", () => {
+    const s = freshStore();
+    s.note({ namespace: "ns", key: "a", content: "edge case with a colon: value" });
+    // Unbalanced quote / stray operators must degrade gracefully, never throw.
+    expect(() => s.recall({ query: 'colon: "value' })).not.toThrow();
+  });
+});
+
+describe("sanitizeFtsQuery", () => {
+  it("quotes bare terms and preserves operators and phrases", async () => {
+    const { sanitizeFtsQuery } = await import("../src/core/store.js");
+    expect(sanitizeFtsQuery("one-pager OR collateral")).toBe('"one-pager" OR "collateral"');
+    expect(sanitizeFtsQuery('"exact phrase" AND term*')).toBe('"exact phrase" AND "term"*');
+    expect(sanitizeFtsQuery("   ")).toBe('""');
+  });
 });
 
 describe("MemoryStore.browse", () => {

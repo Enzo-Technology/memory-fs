@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { MemoryStore } from "../core/store";
+import { log, safeArgs } from "./log.js";
 
 const recordType = z.enum(["user", "feedback", "project", "reference", "note"]);
 const onConflict = z.enum(["overwrite", "append", "error"]);
@@ -25,6 +26,22 @@ const err = (message: string) => ({
     content: [{ type: "text" as const, text: message }],
     isError: true,
 });
+
+// Single error boundary for every tool: an uncaught throw from the store would otherwise
+// reach the client as an opaque protocol error with nothing recorded server-side. Wrap each
+// handler so all errors are logged with their tool + structural args (never record bodies —
+// see safeArgs) and returned as a clean isError result.
+type Handler<A> = (args: A) => Promise<ReturnType<typeof ok>>;
+const guard = <A>(tool: string, fn: Handler<A>): Handler<A> =>
+    async (args: A) => {
+        try {
+            return await fn(args);
+        } catch (e) {
+            const message = e instanceof Error ? e.message : String(e);
+            log.error({ tool, args: safeArgs(args), err: message }, "tool error");
+            return err(message);
+        }
+    };
 
 // `author` is the verified principal's id (token sub) for this request, or null
 // over stdio. It is bound here, not taken from tool args, so writes are attributed
@@ -58,7 +75,7 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
                 on_conflict: onConflict.optional().describe("behavior if (namespace, key) already exists; default 'overwrite'"),
             },
         },
-        async (args) => ok(store.note(args, author)),
+        guard("context_write", async (args) => ok(store.note(args, author))),
     );
 
     server.registerTool(
@@ -70,9 +87,12 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
                 "Search the SHARED team context by full-text query; returns full ranked records " +
                 "(records with inbound links rank first), not just snippets. Read it before acting when " +
                 "the user references prior context, decisions, conventions, or direction you weren't told " +
-                "this session. FTS5 syntax: phrases (\"exact phrase\"), boolean (X AND Y), prefix (term*).",
+                "this session. Just type the words you're looking for — multiple words are matched together " +
+                "and ordinary terms (including hyphenated ones like 'one-pager') are handled safely, no " +
+                "escaping needed. Optional operators to refine: OR to broaden across synonyms " +
+                "(a OR b OR c), \"quoted phrases\" for an exact sequence, and term* for a prefix.",
             inputSchema: {
-                query: z.string().min(1).describe("FTS5 search expression"),
+                query: z.string().min(1).describe("search words, or an expression using OR / \"phrases\" / term*"),
                 namespace: z.string().optional().describe(NS_FILTER_DESC),
                 type: recordType.optional().describe("restrict results to this type"),
                 tags: z.array(z.string()).optional().describe("restrict results to records with all these tags"),
@@ -80,7 +100,7 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
                 limit: z.number().int().positive().max(20).optional().describe("default 5"),
             },
         },
-        async (args) => ok(store.recall(args)),
+        guard("context_search", async (args) => ok(store.recall(args))),
     );
 
     server.registerTool(
@@ -101,7 +121,7 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
                 limit: z.number().int().positive().max(100).optional().describe("default 20"),
             },
         },
-        async (args) => ok(store.browse(args)),
+        guard("context_browse", async (args) => ok(store.browse(args))),
     );
 
     server.registerTool(
@@ -119,7 +139,7 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
                 key: z.string().min(1).describe(KEY_DESC),
             },
         },
-        async ({ namespace, key }) => {
+        guard("context_read", async ({ namespace, key }) => {
             const m = store.read(namespace, key);
             if (!m) {
                 return ok({
@@ -128,7 +148,7 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
                 });
             }
             return ok(m);
-        },
+        }),
     );
 
     server.registerTool(
@@ -146,14 +166,10 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
                 force: z.boolean().optional().describe("override the backlink-protection check"),
             },
         },
-        async ({ namespace, key, force }) => {
-            try {
-                const deleted = store.del(namespace, key, force ?? false);
-                return ok({ deleted, namespace, key });
-            } catch (e) {
-                return err((e as Error).message);
-            }
-        },
+        guard("context_delete", async ({ namespace, key, force }) => {
+            const deleted = store.del(namespace, key, force ?? false);
+            return ok({ deleted, namespace, key });
+        }),
     );
 
     server.registerTool(
@@ -173,10 +189,10 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
                 relation: z.string().optional().describe("defaults to 'related'"),
             },
         },
-        async ({ from_namespace, from_key, to_namespace, to_key, relation }) => {
+        guard("context_link", async ({ from_namespace, from_key, to_namespace, to_key, relation }) => {
             const linked = store.link(from_namespace, from_key, to_namespace, to_key, relation);
             return ok({ linked, relation: relation ?? "related" });
-        },
+        }),
     );
 
     server.registerTool(
@@ -193,7 +209,7 @@ export function buildMcpServer(store: MemoryStore, author: string | null = null)
                 key: z.string().min(1).describe(KEY_DESC),
             },
         },
-        async ({ namespace, key }) => ok(store.backlinks(namespace, key)),
+        guard("context_backlinks", async ({ namespace, key }) => ok(store.backlinks(namespace, key))),
     );
 
     return server;

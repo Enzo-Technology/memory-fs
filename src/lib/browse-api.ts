@@ -5,6 +5,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { BrowseKind, MemoryStore } from "../core/store.js";
 import type { Session } from "./session.js";
+import { log } from "./log.js";
 
 const BROWSE_KINDS = new Set<BrowseKind>([
   "index",
@@ -29,6 +30,26 @@ function num(v: string | null): number | undefined {
 
 export function makeBrowseApi(store: MemoryStore, requireSession: RequireSession) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+    try {
+      await handle(store, requireSession, req, res);
+    } catch (e) {
+      // Error boundary for the read API: log every throw with its route, then return 500
+      // (if we haven't already started a response) rather than leaving the socket hanging.
+      log.error(
+        { method: req.method, url: req.url, err: e instanceof Error ? e.message : String(e) },
+        "browse-api error",
+      );
+      if (!res.headersSent) json(res, 500, { error: "internal error" });
+    }
+  };
+}
+
+async function handle(
+  store: MemoryStore,
+  requireSession: RequireSession,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
     // Boundary: no valid session → 401. The org perimeter is upstream (Google Internal
     // consent); here we only require *a* signed-in principal, not a specific one — reads are
     // global, matching the shared-store model and the /mcp read tools.
@@ -112,5 +133,4 @@ export function makeBrowseApi(store: MemoryStore, requireSession: RequireSession
     }
 
     return json(res, 404, { error: "not found" });
-  };
 }

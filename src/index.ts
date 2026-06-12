@@ -15,13 +15,24 @@ import { buildMcpServer } from "./lib/mcp-server.js";
 import { serveWebApp } from "./lib/auth-ui.js";
 import { makeRequireSession } from "./lib/session.js";
 import { makeBrowseApi } from "./lib/browse-api.js";
+import { log } from "./lib/log.js";
 
+// Last-resort error boundary: anything that escapes a handler still gets recorded. A
+// synchronous uncaught exception leaves the process in an undefined state, so log and
+// crash (a clean restart beats limping on); a rejected promise is logged but survivable.
+process.on("uncaughtException", (e) => {
+  log.fatal({ err: e.message, stack: e.stack }, "uncaughtException");
+  process.exit(1);
+});
+process.on("unhandledRejection", (e) => {
+  log.error({ err: e instanceof Error ? e.message : String(e) }, "unhandledRejection");
+});
 
 let db;
 try {
   db = openDb();
 } catch (e) {
-  console.error(`[memory-fs] failed to open db`);
+  log.fatal({ err: e instanceof Error ? e.message : String(e) }, "failed to open db");
   process.exit(1);
 }
 const store = new MemoryStore(db);
@@ -39,7 +50,7 @@ const httpPort = process.env.MEMORY_FS_HTTP_PORT
 if (httpPort) {
   const parsedPort = parseInt(httpPort, 10);
   if (isNaN(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
-    console.error(`[memory-fs] MEMORY_FS_HTTP_PORT must be a number between 1 and 65535, got: ${httpPort}`);
+    log.fatal({ httpPort }, "MEMORY_FS_HTTP_PORT must be a number between 1 and 65535");
     process.exit(1);
   }
 
@@ -115,7 +126,7 @@ if (httpPort) {
       mcpServer.connect(transport).then(() => {
         return transport.handleRequest(req, res);
       }).catch((e) => {
-        console.error("[memory-fs] transport error:", (e as Error).message);
+        log.error({ err: (e as Error).message }, "mcp transport error");
         if (!res.headersSent) res.writeHead(500).end();
       });
       return;
@@ -133,14 +144,14 @@ if (httpPort) {
   });
 
   httpServer.listen(parsedPort, "127.0.0.1", () => {
-    console.error(`[memory-fs] listening on 127.0.0.1:${httpPort}`);
+    log.info({ port: parsedPort }, "listening on 127.0.0.1");
   });
 
   // Graceful drain: stop accepting, let in-flight requests finish, then close the
   // DB and exit. Lets the deploy cutover SIGTERM the old release without dropping
   // live requests. The unref'd timer is a backstop if a connection won't close.
   const shutdown = (signal: string) => {
-    console.error(`[memory-fs] ${signal} — draining`);
+    log.info({ signal }, "draining");
     httpServer.close(() => {
       db.close();
       process.exit(0);
@@ -153,5 +164,5 @@ if (httpPort) {
   const transport = new StdioServerTransport();
   const server = buildMcpServer(store);
   await server.connect(transport);
-  console.error(`[memory-fs] connected over stdio`);
+  log.info("connected over stdio");
 }

@@ -7,8 +7,36 @@ import {
 } from "./db.js";
 import { deriveKey, normalizeKey, normalizeNamespace } from "./slug.js";
 import { parseWikilinks } from "./wikilinks.js";
+import { log } from "../lib/log.js";
 
 export type OnConflict = "overwrite" | "append" | "error";
+
+// FTS5's MATCH grammar treats characters like '-' and ':' as operators, so a perfectly
+// ordinary caller query ("one-pager OR sell sheet") throws `no such column: pager` when
+// passed raw. Quote every BARE term so its punctuation is literal, while passing the real
+// operators (AND/OR/NOT/NEAR, parens, "quoted phrases", trailing * prefix) straight through.
+// The result is a valid FTS5 expression that preserves the caller's boolean intent.
+export function sanitizeFtsQuery(raw: string): string {
+  const out: string[] = [];
+  const re = /"[^"]*"|[()]|[^\s()"]+/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(raw)) !== null) {
+    const tok = m[0];
+    if (tok === "(" || tok === ")" || tok.startsWith('"')) {
+      out.push(tok);
+      continue;
+    }
+    if (tok === "AND" || tok === "OR" || tok === "NOT" || tok === "NEAR") {
+      out.push(tok);
+      continue;
+    }
+    const prefix = tok.endsWith("*");
+    const core = (prefix ? tok.slice(0, -1) : tok).replace(/"/g, "");
+    if (!core) continue;
+    out.push(prefix ? `"${core}"*` : `"${core}"`);
+  }
+  return out.join(" ") || '""';
+}
 export type BrowseKind =
   | "index"
   | "recent"
@@ -344,8 +372,10 @@ export class MemoryStore {
   }
 
   recall(input: RecallInput): Memory[] {
+    const rewritten = sanitizeFtsQuery(input.query);
+    log.debug({ raw: input.query, rewritten }, "context_search");
     const where: string[] = ["memories_fts MATCH @query"];
-    const params: Record<string, unknown> = { query: input.query };
+    const params: Record<string, unknown> = { query: rewritten };
     if (input.namespace) {
       where.push("m.namespace = @namespace");
       params.namespace = normalizeNamespace(input.namespace);
@@ -364,20 +394,35 @@ export class MemoryStore {
       params[p] = tag;
     }
     params.limit = input.limit ?? 5;
-    const rows = this.db
-      .prepare<unknown[], MemoryRow & { has_inbound: 0 | 1 }>(
-        `SELECT m.*,
-                EXISTS (SELECT 1 FROM links l
-                         WHERE l.to_namespace = m.namespace
-                           AND l.to_key = m.key) AS has_inbound
-         FROM memories_fts
-         JOIN memories m ON m.id = memories_fts.rowid
-         WHERE ${where.join(" AND ")}
-         ORDER BY has_inbound DESC, bm25(memories_fts)
-         LIMIT @limit`,
-      )
-      .all(params);
-    return rows.map(rowToMemory);
+    const stmt = this.db.prepare<unknown[], MemoryRow & { has_inbound: 0 | 1 }>(
+      `SELECT m.*,
+              EXISTS (SELECT 1 FROM links l
+                       WHERE l.to_namespace = m.namespace
+                         AND l.to_key = m.key) AS has_inbound
+       FROM memories_fts
+       JOIN memories m ON m.id = memories_fts.rowid
+       WHERE ${where.join(" AND ")}
+       ORDER BY has_inbound DESC, bm25(memories_fts)
+       LIMIT @limit`,
+    );
+    const run = (q: string) => {
+      params.query = q;
+      return stmt.all(params).map(rowToMemory);
+    };
+    try {
+      return run(rewritten);
+    } catch (e) {
+      // The sanitizer makes a clean parse the norm, but pathological input (e.g. unbalanced
+      // parens) can still reach FTS5 and throw SQLITE_ERROR. Degrade to the bag-of-quoted-words
+      // fallback rather than surfacing a raw SQLite error — search should bend, not break.
+      if ((e as { code?: string }).code !== "SQLITE_ERROR") throw e;
+      const fallback = this.ftsQuery(input.query);
+      log.warn(
+        { raw: input.query, rewritten, fallback, err: (e as Error).message },
+        "context_search fell back after FTS5 parse error",
+      );
+      return run(fallback);
+    }
   }
 
   browse(input: BrowseInput): BrowseResult {
